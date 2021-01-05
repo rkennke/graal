@@ -32,8 +32,8 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,7 +47,12 @@ public class JfrNativeTestRunner {
 
     private void runTests() throws IOException, ClassNotFoundException {
         ClassScanner scanner = new ClassScanner();
-        scanner.scanClasses(cls -> scanClass(cls));
+        scanner.scanClasses(this::scanClass);
+    }
+
+    @SuppressWarnings(value = "unchecked")
+    private Class<? extends JfrNativeTestCase> narrowClass(Class<?> cls) {
+        return (Class<? extends JfrNativeTestCase>) cls;
     }
 
     private void scanClass(Class<?> cls) throws IOException {
@@ -59,7 +64,7 @@ public class JfrNativeTestRunner {
             Path image = buildNativeImage(cls);
             executeNativeImage(image);
             String xml = parseRecordingToXML(recording);
-            System.out.println(xml);
+            invokeVerification(narrowClass(cls), xml);
         }
     }
 
@@ -102,8 +107,7 @@ public class JfrNativeTestRunner {
     private Path buildNativeImage(Class<?> cls) throws IOException {
         Path image = Files.createTempFile("ïmage", "");
         System.out.println("create image: " + image.toString());
-        ProcessBuilder pb = new ProcessBuilder("mx", "native-image", "-H:+ReportExceptionStackTraces",  "--allow-incomplete-classpath",
-                                        "-J-XX:FlightRecorderOptions=retransform=false", "--no-fallback", "-ea",
+        ProcessBuilder pb = new ProcessBuilder("mx", "native-image", "-H:+ReportExceptionStackTraces",  "-H:+FlightRecorder", "--no-fallback", "-ea",
                                         "-cp", System.getProperty("java.io.tmpdir") + System.getProperty("path.separator") + System.getProperty("java.class.path"),
                                         cls.getName() + "Runner", image.toString());
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
@@ -122,6 +126,9 @@ public class JfrNativeTestRunner {
     private void executeNativeImage(Path image) throws IOException {
         System.err.println("executing native image: " + image);
         ProcessBuilder pb = new ProcessBuilder(image.toString());
+        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
         Process proc = pb.start();
         try {
             proc.waitFor();
@@ -145,5 +152,16 @@ public class JfrNativeTestRunner {
             throw new RuntimeException(ex);
         }
         return sj.toString();
+    }
+
+    private void invokeVerification(Class<? extends JfrNativeTestCase> cls, String xml) {
+        System.out.println("Invoking verification");
+        try {
+            JfrNativeTestCase test = cls.getDeclaredConstructor().newInstance();
+            test.verify(xml);
+        } catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException ex) {
+            // Can't really happen.
+            throw new InternalError(ex);
+        }
     }
 }
