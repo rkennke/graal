@@ -29,7 +29,6 @@ import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -37,6 +36,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.StringJoiner;
 
 public class JfrNativeTestRunner {
@@ -55,29 +55,57 @@ public class JfrNativeTestRunner {
         return (Class<? extends JfrNativeTestCase>) cls;
     }
 
-    private void scanClass(Class<?> cls) throws IOException {
-        if (JfrNativeTestCase.class.isAssignableFrom(cls) && (cls.getModifiers() & (Modifier.ABSTRACT | Modifier.INTERFACE)) == 0) {
-            Path recording = Files.createTempFile("test-recording", ".jfr");
-            System.out.println("Recording in: " + recording);
-            File runnerSourceFile = generateRunner(cls, recording);
-            compileRunner(runnerSourceFile);
-            Path image = buildNativeImage(cls);
-            executeNativeImage(image);
-            String xml = parseRecordingToXML(recording);
-            invokeVerification(narrowClass(cls), xml);
+    private static String getRunnerClassName(Class<? extends JfrNativeTestCase> cls, String suffix) {
+        return cls.getSimpleName() + "Runner" + suffix;
+    }
+
+    @SuppressWarnings(value = "unchecked")
+    private static Class<? extends JfrNativeTestCase> narrowTestClass(Class<?> clazz) {
+        return (Class<? extends JfrNativeTestCase>) clazz;
+    }
+
+    private static void deleteFile(Path path) throws IOException {
+        if (path != null) {
+            Files.deleteIfExists(path);
         }
     }
 
-    private File generateRunner(Class<?> cls, Path recording) throws IOException {
-        String testClassName = cls.getSimpleName();
+    private void scanClass(Class<?> cls) throws IOException {
+        if (JfrNativeTestCase.class.isAssignableFrom(cls) && (cls.getModifiers() & (Modifier.ABSTRACT | Modifier.INTERFACE)) == 0) {
+            Class<? extends JfrNativeTestCase> testClazz = narrowTestClass(cls);
+            Path runnerSourceFile = null;
+            Path image = null;
+            Path recording = null;
+            try {
+                recording = Files.createTempFile("test-recording", ".jfr");
+                System.out.println("Recording in: " + recording);
+                runnerSourceFile = generateRunner(testClazz, recording);
+                compileRunner(runnerSourceFile);
+                image = buildNativeImage(testClazz);
+                executeNativeImage(image);
+                String xml = parseRecordingToXML(recording);
+                invokeVerification(narrowClass(testClazz), xml);
+            } finally {
+                deleteFile(image);
+                if (image != null) {
+                    deleteFile(Paths.get(image.toString(), ".o")); // Possible left-overs from native-compilation
+                }
+                deleteFile(Paths.get(System.getProperty("java.io.tmpdir"), getRunnerClassName(testClazz, ".class")));
+                deleteFile(runnerSourceFile);
+                deleteFile(recording);
+            }
+        }
+    }
+
+    private Path generateRunner(Class<? extends JfrNativeTestCase> cls, Path recording) throws IOException {
+        String testClassName = cls.getName();
         System.out.println("Generating native runner for: " + testClassName);
         String tmpDir = System.getProperty("java.io.tmpdir");
-        String runnerClassName = testClassName + "Runner";
-        File runnerSourceFile = new File(tmpDir, runnerClassName + ".java");
+        String runnerClassName = getRunnerClassName(cls, "");
+        Path runnerSourceFile = Files.createFile(Paths.get(tmpDir, getRunnerClassName(cls, ".java")));
         System.out.println("Java source file: " + runnerSourceFile);
         String path = recording.toUri().toString();
-        BufferedWriter writer = new BufferedWriter(new FileWriter(runnerSourceFile));
-        writer.write("package " + cls.getPackage().getName() + ";\n");
+        BufferedWriter writer = new BufferedWriter(new FileWriter(runnerSourceFile.toFile()));
         writer.write("import java.net.URI;\n");
         writer.write("import java.nio.file.Path;\n");
         writer.write("import jdk.jfr.Configuration;\n");
@@ -99,17 +127,17 @@ public class JfrNativeTestRunner {
         return runnerSourceFile;
     }
 
-    private void compileRunner(File sourceFile) {
+    private void compileRunner(Path sourceFile) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-        compiler.run(null, null, null, "-d", System.getProperty("java.io.tmpdir"), sourceFile.getPath());
+        compiler.run(null, null, null, "-d", System.getProperty("java.io.tmpdir"), sourceFile.toString());
     }
 
-    private Path buildNativeImage(Class<?> cls) throws IOException {
+    private Path buildNativeImage(Class<? extends JfrNativeTestCase> cls) throws IOException {
         Path image = Files.createTempFile("ïmage", "");
         System.out.println("create image: " + image.toString());
         ProcessBuilder pb = new ProcessBuilder("mx", "native-image", "-H:+ReportExceptionStackTraces",  "-H:+FlightRecorder", "--no-fallback", "-ea",
                                         "-cp", System.getProperty("java.io.tmpdir") + System.getProperty("path.separator") + System.getProperty("java.class.path"),
-                                        cls.getName() + "Runner", image.toString());
+                                        getRunnerClassName(cls, ""), image.toString());
         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
         pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
         pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
