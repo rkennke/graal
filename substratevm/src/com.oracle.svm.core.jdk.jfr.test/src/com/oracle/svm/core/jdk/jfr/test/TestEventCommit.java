@@ -35,9 +35,9 @@ import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordingFile;
-import org.junit.Test;
 
 import static org.junit.Assert.*;
+import org.junit.Test;
 
 public class TestEventCommit {
 
@@ -73,6 +73,8 @@ public class TestEventCommit {
                 }
             }
             assertTrue(foundEvent);
+        } finally {
+            Files.deleteIfExists(tmpfile);
         }
     }
 }

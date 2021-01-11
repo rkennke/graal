@@ -21,12 +21,17 @@
 
 package com.oracle.svm.core.jdk.jfr.test.event;
 
-import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 import com.oracle.svm.core.jdk.jfr.test.utils.JFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.LocalJFR;
 
+import jdk.jfr.consumer.RecordedEvent;
+import jdk.jfr.consumer.RecordingFile;
+
+import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class TestMultipleEvents {
@@ -46,10 +51,20 @@ public class TestMultipleEvents {
             event.commit();
         }
 
-        File recording = jfr.endRecording(id);
+        Path recording = jfr.endRecording(id);
 
-        long d0 = System.currentTimeMillis() - s0;
-//        System.out.println("elapsed:" + d0);
-//        System.err.println("jfr recording: " + recording);
+        try (RecordingFile recordingFile = new RecordingFile(recording)) {
+            long numEvents = 0;
+            while (recordingFile.hasMoreEvents()) {
+                RecordedEvent recordedEvent = recordingFile.readEvent();
+                if ("com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent".equals(recordedEvent.getEventType().getName())) {
+                    numEvents++;
+                    assertEquals("Event has been generated!", recordedEvent.getValue("message"));
+                }
+            }
+            assertEquals(count, numEvents);
+        } finally {
+            Files.deleteIfExists(recording);
+        }
     }
 }

@@ -23,7 +23,11 @@ package com.oracle.svm.core.jdk.jfr.test.event;
 
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 
+import jdk.jfr.consumer.RecordedEvent;
+import jdk.jfr.consumer.RecordingFile;
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 public class TestSingleEventClean {
 

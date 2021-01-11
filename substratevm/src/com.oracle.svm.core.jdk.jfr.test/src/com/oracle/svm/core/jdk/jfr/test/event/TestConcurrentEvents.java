@@ -21,26 +21,30 @@
 
 package com.oracle.svm.core.jdk.jfr.test.event;
 
-import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 import com.oracle.svm.core.jdk.jfr.test.utils.JFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.LocalJFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.Stressor;
 
+import jdk.jfr.consumer.RecordedEvent;
+import jdk.jfr.consumer.RecordingFile;
+
+import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class TestConcurrentEvents {
 
     @Test
     public void test() throws Exception {
-        long s0 = System.currentTimeMillis();
         JFR jfr = new LocalJFR();
         int threadCount = 8;
         long id = jfr.startRecording("TestConcurrentEvents");
 
+        int count = 1024 * 1024;
         Runnable r = () -> {
-            int count = 1024 * 1024;
             for (int i = 0; i < count; i++) {
                 StringEvent event = new StringEvent();
                 event.message = "Event has been generated!";
@@ -50,10 +54,20 @@ public class TestConcurrentEvents {
         Thread.UncaughtExceptionHandler eh = (t, e) -> e.printStackTrace();
         Stressor.execute(threadCount, eh, r);
 
-        File recording = jfr.endRecording(id);
+        Path recording = jfr.endRecording(id);
 
-        long d0 = System.currentTimeMillis() - s0;
-//        System.out.println("elapsed:" + d0);
-//        System.err.println("jfr recording: " + recording);
+        try (RecordingFile recordingFile = new RecordingFile(recording)) {
+            long numEvents = 0;
+            while (recordingFile.hasMoreEvents()) {
+                RecordedEvent recordedEvent = recordingFile.readEvent();
+                if ("com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent".equals(recordedEvent.getEventType().getName())) {
+                    numEvents++;
+                    assertEquals("Event has been generated!", recordedEvent.getValue("message"));
+                }
+            }
+            assertEquals(threadCount * count, numEvents);
+        } finally {
+            Files.deleteIfExists(recording);
+        }
     }
 }

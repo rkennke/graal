@@ -23,18 +23,22 @@ package com.oracle.svm.core.jdk.jfr.test.recording;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 
 import jdk.jfr.Recording;
 
+import jdk.jfr.consumer.RecordedEvent;
+import jdk.jfr.consumer.RecordingFile;
+
+import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class TestConsecutiveRecordings {
     @Test
     public void test() throws IOException {
-        long s0 = System.currentTimeMillis();
         String name = "One";
         Recording r = new Recording();
         Path destination1 = File.createTempFile(name, ".jfr").toPath();
@@ -62,9 +66,31 @@ public class TestConsecutiveRecordings {
         r.dump(destination2);
         r.close();
 
-        long d0 = System.currentTimeMillis() - s0;
-//        System.out.println("elapsed:" + d0);
-//        System.err.println("jfr recording: " + destination1);
-//        System.err.println("jfr recording: " + destination2);
+        try (RecordingFile recordingFile = new RecordingFile(destination1)) {
+            long numEvents = 0;
+            while (recordingFile.hasMoreEvents()) {
+                RecordedEvent recordedEvent = recordingFile.readEvent();
+                if ("com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent".equals(recordedEvent.getEventType().getName())) {
+                    numEvents++;
+                    assertEquals("Event has been generated!", recordedEvent.getValue("message"));
+                }
+            }
+            assertEquals(2, numEvents);
+        } finally {
+            Files.deleteIfExists(destination1);
+        }
+        try (RecordingFile recordingFile = new RecordingFile(destination2)) {
+            long numEvents = 0;
+            while (recordingFile.hasMoreEvents()) {
+                RecordedEvent recordedEvent = recordingFile.readEvent();
+                if ("com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent".equals(recordedEvent.getEventType().getName())) {
+                    numEvents++;
+                    assertEquals("Event has been generated!", recordedEvent.getValue("message"));
+                }
+            }
+            assertEquals(2, numEvents);
+        } finally {
+            Files.deleteIfExists(destination2);
+        }
     }
 }

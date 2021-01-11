@@ -43,11 +43,11 @@ public class LocalJFR implements JFR {
         return startRecording(new Recording(c), recordingName);
     }
 
-    public File endRecording(long id) {
+    public Path endRecording(long id) {
         Recording recording = recordings.remove(id);
         recording.stop();
         recording.close();
-        return recording.getDestination().toFile();
+        return recording.getDestination();
     }
 
     public long startRecording(Recording recording, String name) throws Exception {
