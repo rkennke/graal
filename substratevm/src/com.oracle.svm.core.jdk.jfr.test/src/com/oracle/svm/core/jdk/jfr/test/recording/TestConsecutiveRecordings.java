@@ -21,11 +21,8 @@
 
 package com.oracle.svm.core.jdk.jfr.test.recording;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
+import com.oracle.svm.core.jdk.jfr.test.utils.JFR;
+import com.oracle.svm.core.jdk.jfr.test.utils.LocalJFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 
 import jdk.jfr.Recording;
@@ -38,35 +35,25 @@ import org.junit.Test;
 
 public class TestConsecutiveRecordings {
     @Test
-    public void test() throws IOException {
-        String name = "One";
-        Recording r = new Recording();
-        Path destination1 = File.createTempFile(name, ".jfr").toPath();
-        r.setDestination(destination1);
-
-        r.start();
+    public void test() throws Exception {
+        JFR jfr = new LocalJFR();
+        Recording recording1 = jfr.startRecording("One");
         for (int i = 0; i < 2; i++) {
             StringEvent event = new StringEvent();
             event.message = "Event has been generated!";
             event.commit();
         }
-        r.stop();
-        r.close();
+        jfr.endRecording(recording1);
 
-        name = "Two";
-        r = new Recording();
-        r.start();
+        Recording recording2 = jfr.startRecording("Two");
         for (int i = 0; i < 2; i++) {
             StringEvent event = new StringEvent();
             event.message = "Event has been generated!";
             event.commit();
         }
-        r.stop();
-        Path destination2 = File.createTempFile(name, ".jfr").toPath();
-        r.dump(destination2);
-        r.close();
+        jfr.endRecording(recording2);
 
-        try (RecordingFile recordingFile = new RecordingFile(destination1)) {
+        try (RecordingFile recordingFile = new RecordingFile(recording1.getDestination())) {
             long numEvents = 0;
             while (recordingFile.hasMoreEvents()) {
                 RecordedEvent recordedEvent = recordingFile.readEvent();
@@ -77,9 +64,9 @@ public class TestConsecutiveRecordings {
             }
             assertEquals(2, numEvents);
         } finally {
-            Files.deleteIfExists(destination1);
+            jfr.cleanupRecording(recording1);
         }
-        try (RecordingFile recordingFile = new RecordingFile(destination2)) {
+        try (RecordingFile recordingFile = new RecordingFile(recording2.getDestination())) {
             long numEvents = 0;
             while (recordingFile.hasMoreEvents()) {
                 RecordedEvent recordedEvent = recordingFile.readEvent();
@@ -90,7 +77,7 @@ public class TestConsecutiveRecordings {
             }
             assertEquals(2, numEvents);
         } finally {
-            Files.deleteIfExists(destination2);
+            jfr.cleanupRecording(recording2);
         }
     }
 }

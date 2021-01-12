@@ -22,43 +22,49 @@
 package com.oracle.svm.core.jdk.jfr.test.utils;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 
 public class LocalJFR implements JFR {
-    private final Map<Long, Recording> recordings = new HashMap<>();
 
     @Override
-    public long startRecording(String recordingName) throws Exception {
+    public Recording startRecording(String recordingName) throws Exception {
         return startRecording(new Recording(), recordingName);
     }
 
     @Override
-    public long startRecording(String recordingName, String configName) throws Exception {
+    public Recording startRecording(String recordingName, String configName) throws Exception {
         Configuration c = Configuration.getConfiguration(configName);
         return startRecording(new Recording(c), recordingName);
     }
 
-    public Path endRecording(long id) {
-        Recording recording = recordings.remove(id);
-        recording.stop();
-        recording.close();
-        return recording.getDestination();
-    }
-
-    public long startRecording(Recording recording, String name) throws Exception {
+    private Recording startRecording(Recording recording, String name) throws Exception {
         long id = recording.getId();
 
         Path destination = File.createTempFile(name + "-" + id, ".jfr").toPath();
         recording.setDestination(destination);
 
-        recordings.put(id, recording);
-
         recording.start();
-        return id;
+        return recording;
+    }
+
+    @Override
+    public void endRecording(Recording recording) {
+        recording.stop();
+        recording.close();
+    }
+
+    @Override
+    public void cleanupRecording(Recording recording) throws IOException {
+        String debugRecording = System.getenv("DEBUG_RECORDING");
+        if (debugRecording != null && !"false".equals(debugRecording)) {
+            System.out.println("Recording: " + recording);
+        } else {
+            Files.deleteIfExists(recording.getDestination());
+        }
     }
 }

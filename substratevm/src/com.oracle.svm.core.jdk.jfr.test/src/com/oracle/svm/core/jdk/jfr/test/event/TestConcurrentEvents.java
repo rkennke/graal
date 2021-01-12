@@ -21,14 +21,12 @@
 
 package com.oracle.svm.core.jdk.jfr.test.event;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 import com.oracle.svm.core.jdk.jfr.test.utils.JFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.LocalJFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.Stressor;
 
+import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordingFile;
 
@@ -41,7 +39,7 @@ public class TestConcurrentEvents {
     public void test() throws Exception {
         JFR jfr = new LocalJFR();
         int threadCount = 8;
-        long id = jfr.startRecording("TestConcurrentEvents");
+        Recording recording = jfr.startRecording("TestConcurrentEvents");
 
         int count = 1024 * 1024;
         Runnable r = () -> {
@@ -54,9 +52,9 @@ public class TestConcurrentEvents {
         Thread.UncaughtExceptionHandler eh = (t, e) -> e.printStackTrace();
         Stressor.execute(threadCount, eh, r);
 
-        Path recording = jfr.endRecording(id);
+        jfr.endRecording(recording);
 
-        try (RecordingFile recordingFile = new RecordingFile(recording)) {
+        try (RecordingFile recordingFile = new RecordingFile(recording.getDestination())) {
             long numEvents = 0;
             while (recordingFile.hasMoreEvents()) {
                 RecordedEvent recordedEvent = recordingFile.readEvent();
@@ -67,7 +65,7 @@ public class TestConcurrentEvents {
             }
             assertEquals(threadCount * count, numEvents);
         } finally {
-            Files.deleteIfExists(recording);
+            jfr.cleanupRecording(recording);
         }
     }
 }

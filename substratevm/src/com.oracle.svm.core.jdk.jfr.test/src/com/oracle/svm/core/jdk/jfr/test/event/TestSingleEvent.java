@@ -21,13 +21,11 @@
 
 package com.oracle.svm.core.jdk.jfr.test.event;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 import com.oracle.svm.core.jdk.jfr.test.utils.JFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.LocalJFR;
 
+import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordingFile;
 
@@ -39,15 +37,15 @@ public class TestSingleEvent {
     @Test
     public void test() throws Exception {
         JFR jfr = new LocalJFR();
-        long id = jfr.startRecording("TestSingleEvent");
+        Recording recording = jfr.startRecording("TestSingleEvent");
 
         StringEvent event = new StringEvent();
         event.message = "Event has been generated!";
         event.commit();
 
-        Path recording = jfr.endRecording(id);
+        jfr.endRecording(recording);
 
-        try (RecordingFile recordingFile = new RecordingFile(recording)) {
+        try (RecordingFile recordingFile = new RecordingFile(recording.getDestination())) {
             long numEvents = 0;
             while (recordingFile.hasMoreEvents()) {
                 RecordedEvent recordedEvent = recordingFile.readEvent();
@@ -58,7 +56,7 @@ public class TestSingleEvent {
             }
             assertEquals(1, numEvents);
         } finally {
-            Files.deleteIfExists(recording);
+            jfr.cleanupRecording(recording);
         }
     }
 }

@@ -21,15 +21,19 @@
 
 package com.oracle.svm.core.jdk.jfr.test.utils;
 
-import java.nio.file.Path;
+import java.io.IOException;
+
+import jdk.jfr.Recording;
 
 /**
  * Utility class to handle recording.
  */
 public interface JFR {
-    long startRecording(String recordingName) throws Exception;
+    Recording startRecording(String recordingName) throws Exception;
 
-    long startRecording(String recordingName, String configName) throws Exception;
+    Recording startRecording(String recordingName, String configName) throws Exception;
 
-    Path endRecording(long id) throws Exception;
+    void endRecording(Recording recording) throws Exception;
+
+    void cleanupRecording(Recording recording) throws IOException;
 }
