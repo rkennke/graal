@@ -21,30 +21,23 @@
 
 package com.oracle.svm.core.jdk.jfr.test.recording;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
-
+import com.oracle.svm.core.jdk.jfr.test.utils.JFR;
+import com.oracle.svm.core.jdk.jfr.test.utils.LocalJFR;
 import com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent;
 
 import jdk.jfr.Recording;
+import jdk.jfr.consumer.RecordedEvent;
+import jdk.jfr.consumer.RecordingFile;
 
+import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class TestInterspersedRecordings {
     @Test
-    public void test() throws IOException {
-        long s0 = System.currentTimeMillis();
-        String nameOne = "One";
-        Recording r1 = new Recording();
-        Path destination1 = File.createTempFile(nameOne, ".jfr").toPath();
-        r1.setDestination(destination1);
-
-        String nameTwo = "Two";
-        Recording r2 = new Recording();
-
-        r1.start();
-        r2.start();
+    public void test() throws Exception {
+        JFR jfr = new LocalJFR();
+        Recording recording1 = jfr.startRecording("One");
+        Recording recording2 = jfr.startRecording("Two");
 
         for (int i = 0; i < 2; i++) {
             StringEvent event = new StringEvent();
@@ -52,8 +45,7 @@ public class TestInterspersedRecordings {
             event.commit();
         }
 
-        r1.stop();
-        r1.close();
+        jfr.endRecording(recording1);
 
         for (int i = 0; i < 2; i++) {
             StringEvent event = new StringEvent();
@@ -61,14 +53,33 @@ public class TestInterspersedRecordings {
             event.commit();
         }
 
-        r2.stop();
-        Path destination2 = File.createTempFile(nameTwo, ".jfr").toPath();
-        r2.dump(destination2);
-        r2.close();
+        jfr.endRecording(recording2);
 
-        long d0 = System.currentTimeMillis() - s0;
-//        System.out.println("elapsed:" + d0);
-//        System.err.println("jfr recording: " + destination1);
-//        System.err.println("jfr recording: " + destination2);
+        try (RecordingFile recordingFile = new RecordingFile(recording1.getDestination())) {
+            long numEvents = 0;
+            while (recordingFile.hasMoreEvents()) {
+                RecordedEvent recordedEvent = recordingFile.readEvent();
+                if ("com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent".equals(recordedEvent.getEventType().getName())) {
+                    numEvents++;
+                    assertEquals("Event has been generated!", recordedEvent.getValue("message"));
+                }
+            }
+            assertEquals(2, numEvents);
+        } finally {
+            jfr.cleanupRecording(recording1);
+        }
+        try (RecordingFile recordingFile = new RecordingFile(recording2.getDestination())) {
+            long numEvents = 0;
+            while (recordingFile.hasMoreEvents()) {
+                RecordedEvent recordedEvent = recordingFile.readEvent();
+                if ("com.oracle.svm.core.jdk.jfr.test.utils.events.StringEvent".equals(recordedEvent.getEventType().getName())) {
+                    numEvents++;
+                    assertEquals("Event has been generated!", recordedEvent.getValue("message"));
+                }
+            }
+            assertEquals(4, numEvents);
+        } finally {
+            jfr.cleanupRecording(recording2);
+        }
     }
 }
