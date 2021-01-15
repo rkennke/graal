@@ -114,15 +114,13 @@ public final class JfrStringPool implements JfrCheckpointClient {
         }
     }
 
-    public boolean addStringConstant(boolean epoch, long id, String s) {
-        if (JfrTraceIdEpoch.currentEpoch() != epoch) {
-            return !epoch;
-        }
+    public boolean addStringConstant(long id, String s) {
+        boolean epoch = JfrTraceIdEpoch.currentEpoch();
         queue(epoch).add(new JfrString(id, s));
         increment(epoch, s.length() + 4);
         this.currentGeneration.incrementAndGet();
 
-        return epoch;
+        return true;
     }
 
     public void write(JfrChunkWriter chunkWriter) {

@@ -79,11 +79,6 @@ final class Target_jdk_jfr_internal_PlatformEventType {
 
 @TargetClass(className = "jdk.jfr.internal.StringPool", onlyWith = JfrAvailability.WithJfr.class)
 final class Target_jdk_jfr_internal_StringPool {
-    @Substitute
-    private static boolean getCurrentEpoch() {
-        return JfrTraceIdEpoch.getEpoch();
-    }
-
     @Alias
     public static long addString(String s) {
         return 0;
@@ -398,6 +393,11 @@ final class Target_jdk_jfr_internal_EventWriter {
         return true;
     }
 
+    @Alias
+    private void resetStringPool() {
+        // Aliased to the real implementation
+    }
+
     @Substitute
     public boolean endEvent() {
         if (!valid) {
@@ -412,6 +412,7 @@ final class Target_jdk_jfr_internal_EventWriter {
         buffer.getBuffer().putInt(startPosition, makePaddedInt(eventSize));
         if (isNotified()) {
             resetNotified();
+            resetStringPool();
             this.reset();
             // returning false will trigger restart of the event write attempt
             return false;
@@ -856,17 +857,9 @@ final class Target_jdk_jfr_internal_JVM {
 
     @Substitute
     @TargetElement(name = "addStringConstant")
-    public static boolean addStringConstant(boolean epoch, long id, String s) {
-        boolean r = JfrStringPool.instance().addStringConstant(epoch, id, s);
+    public static boolean addStringConstant(long id, String s) {
+        boolean r = JfrStringPool.instance().addStringConstant(id, s);
         return r;
-    }
-
-    @Substitute
-    @TargetElement(name = "getEpochAddress")
-    public long getEpochAddress() {
-        // Substitutions for jdk.jfr.internal.StringPool mean this code path should not
-        // be reached
-        throw new RuntimeException("Should not reach here");
     }
 
     @Substitute
