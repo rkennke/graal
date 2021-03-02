@@ -95,4 +95,9 @@ public class JfrTypeRepository implements JfrRepository {
             }
         }
     }
+
+    @Override
+    public boolean hasItems() {
+        return count > 0;
+    }
 }

@@ -62,4 +62,10 @@ public class JfrStringRepository implements JfrRepository {
         // TODO: write encoding (null and empty String have special values as well)
         // TODO: write string data in the correct encoding
     }
+
+    @Override
+    public boolean hasItems() {
+        // TODO: Implement this
+        return false;
+    }
 }
