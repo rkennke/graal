@@ -27,9 +27,16 @@ package com.oracle.svm.jfr;
 import static com.oracle.svm.jfr.PredefinedJFCSubstitition.DEFAULT_JFC;
 import static com.oracle.svm.jfr.PredefinedJFCSubstitition.PROFILE_JFC;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
+import com.oracle.svm.core.hub.DynamicHub;
+import com.oracle.svm.core.hub.DynamicHubSupport;
+import com.oracle.svm.core.meta.SharedType;
+import com.oracle.svm.jfr.traceid.JfrTraceId;
+import com.oracle.svm.jfr.traceid.JfrTraceIdEpoch;
+import com.oracle.svm.jfr.traceid.JfrTraceIdMap;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
@@ -41,7 +48,6 @@ import com.oracle.svm.core.jdk.RuntimeSupport;
 import com.oracle.svm.core.thread.ThreadListenerFeature;
 import com.oracle.svm.core.thread.ThreadListenerSupport;
 import com.oracle.svm.hosted.FeatureImpl;
-import com.oracle.svm.hosted.FeatureImpl.BeforeCompilationAccessImpl;
 import com.oracle.svm.util.ModuleSupport;
 
 import jdk.jfr.Event;
@@ -83,6 +89,8 @@ public class JfrFeature implements Feature {
         ImageSingletons.add(SubstrateJVM.class, new SubstrateJVM());
         ImageSingletons.add(JfrManager.class, new JfrManager());
         ImageSingletons.add(JfrSerializerSupport.class, new JfrSerializerSupport());
+        ImageSingletons.add(JfrTraceIdMap.class, new JfrTraceIdMap());
+        ImageSingletons.add(JfrTraceIdEpoch.class, new JfrTraceIdEpoch());
 
         JfrSerializerSupport.get().register(new JfrFrameTypeSerializer());
         ThreadListenerSupport.get().register(SubstrateJVM.getThreadLocal());
@@ -114,11 +122,23 @@ public class JfrFeature implements Feature {
 
     @Override
     public void beforeCompilation(BeforeCompilationAccess a) {
-        BeforeCompilationAccessImpl access = (BeforeCompilationAccessImpl) a;
-        int typeCount = access.getTypes().size();
+
+        int mapSize = ImageSingletons.lookup(DynamicHubSupport.class).getMaxTypeId() + 1; // Reserve slot 0 for error-catcher.
+
+        // Create trace-ID map with fixed size.
+        ImageSingletons.lookup(JfrTraceIdMap.class).initialize(mapSize);
+
+        // Scan all classes and build sets of packages, modules and class-loaders. Count all items.
+        Collection<? extends SharedType> types = ((FeatureImpl.CompilationAccessImpl) a).getTypes();
+        for (SharedType type : types) {
+            DynamicHub hub = type.getHub();
+            Class<?> clazz = hub.getHostedJavaClass();
+            // Off-set by one for error-catcher
+            JfrTraceId.assign(clazz, hub.getTypeID() + 1);
+        }
+
         // TODO: get the method count
         int methodCount = 0;
-        SubstrateJVM.getTypeRepository().initialize(typeCount);
         SubstrateJVM.getMethodRepository().initialize(methodCount);
     }
 }

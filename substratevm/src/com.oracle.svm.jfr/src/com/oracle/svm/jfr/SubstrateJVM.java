@@ -24,39 +24,27 @@
  */
 package com.oracle.svm.jfr;
 
-//Checkstyle: allow reflection
-import java.lang.reflect.Field;
-
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.core.common.NumUtil;
-import org.graalvm.compiler.serviceprovider.GraalUnsafeAccess;
-import org.graalvm.compiler.word.Word;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.Pointer;
-import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.thread.JavaVMOperation;
 import com.oracle.svm.core.thread.ThreadListener;
 import com.oracle.svm.core.util.VMError;
-import com.oracle.svm.util.ReflectionUtil;
 
 import jdk.jfr.internal.EventWriter;
 import jdk.jfr.internal.JVM;
 import jdk.jfr.internal.LogLevel;
 import jdk.jfr.internal.LogTag;
-import sun.misc.Unsafe;
 
 class SubstrateJVM {
-    private static final Unsafe UNSAFE = GraalUnsafeAccess.getUnsafe();
-    private static final Field EPOCH_FIELD = ReflectionUtil.lookupField(SubstrateJVM.class, "epoch");
-
     private final JfrOptionSet options;
     private final JfrNativeEventSetting[] eventSettings;
     private final JfrStringRepository stringRepo;
@@ -75,7 +63,6 @@ class SubstrateJVM {
     // We can't reuse the field JVM.recording because it does not get set in all the cases that we
     // are interested in.
     private volatile boolean recording;
-    private long epoch;
     private byte[] metadataDescriptor;
 
     @Platforms(Platform.HOSTED_ONLY.class)
@@ -102,7 +89,6 @@ class SubstrateJVM {
 
         initialized = false;
         recording = false;
-        epoch = 0L;
         metadataDescriptor = null;
     }
 
@@ -247,11 +233,6 @@ class SubstrateJVM {
         return typeRepo.getClassId(clazz);
     }
 
-    /** See {@link JVM#getTypeId}. */
-    public long getTypeId(Class<?> clazz) {
-        return DynamicHub.fromClass(clazz).getTypeID();
-    }
-
     /**
      * See {@link JVM#setOutput}. The JFR infrastructure also calls this method when it is time to
      * rotate the file.
@@ -279,13 +260,6 @@ class SubstrateJVM {
         } finally {
             chunkWriter.unlock();
         }
-    }
-
-    /** See {@link JVM#getEpochAddress}. */
-    public long getEpochAddress() {
-        // Only works because this object lives in the image heap.
-        UnsignedWord epochFieldOffset = WordFactory.unsigned(UNSAFE.objectFieldOffset(EPOCH_FIELD));
-        return Word.objectToUntrackedPointer(this).add(epochFieldOffset).rawValue();
     }
 
     /** See {@link JVM#setFileNotification}. */
@@ -455,10 +429,5 @@ class SubstrateJVM {
     public boolean setCutoff(long eventTypeId, long cutoffTicks) {
         eventSettings[NumUtil.safeToInt(eventTypeId)].setCutoffTicks(cutoffTicks);
         return true;
-    }
-
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    public boolean getEpoch() {
-        return epoch == 1L;
     }
 }
