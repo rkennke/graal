@@ -43,10 +43,10 @@ public class TestSingleEvent {
 
         jfr.endRecording(recording);
         /*
-        RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
-        input.seek(23);
-        int cpoolPos = input.readByte();
-        assertEquals(68, cpoolPos);
-        */
+         * RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
+         * input.seek(23);
+         * int cpoolPos = input.readByte();
+         * assertEquals(68, cpoolPos);
+         */
     }
 }

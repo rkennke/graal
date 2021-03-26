@@ -36,6 +36,5 @@ import jdk.jfr.StackTrace;
 @StackTrace(false)
 public class StringEvent extends Event {
 
-    @Label("Message")
-    public String message;
+    @Label("Message") public String message;
 }
