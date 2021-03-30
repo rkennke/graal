@@ -28,7 +28,10 @@ package com.oracle.svm.jfrtest;
 
 import jdk.jfr.Recording;
 
+import static org.junit.Assert.assertEquals;
 import org.junit.Test;
+
+import java.io.RandomAccessFile;
 
 public class TestSingleEvent {
 
@@ -42,11 +45,10 @@ public class TestSingleEvent {
         event.commit();
 
         jfr.endRecording(recording);
-        /*
-         * RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
-         * input.seek(23);
-         * int cpoolPos = input.readByte();
-         * assertEquals(68, cpoolPos);
-         */
+
+        RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
+        input.seek(23);
+        int cpoolPos = input.readByte();
+        assertEquals(68, cpoolPos);
     }
 }
