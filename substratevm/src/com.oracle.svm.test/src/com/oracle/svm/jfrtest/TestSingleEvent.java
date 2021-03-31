@@ -45,10 +45,17 @@ public class TestSingleEvent {
         event.commit();
 
         jfr.endRecording(recording);
+        try {
+            RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
+            input.seek(23);
+            int cpoolPos = input.readByte();
+            assertEquals(68, cpoolPos);
+        } finally {
+            jfr.cleanupRecording(recording);
+        }
+    }
 
-        RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
-        input.seek(23);
-        int cpoolPos = input.readByte();
-        assertEquals(68, cpoolPos);
+    public static void main(String[] args) throws Exception {
+        new TestSingleEvent().test();
     }
 }
