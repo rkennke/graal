@@ -46,7 +46,10 @@ public interface JFR {
     long readRawLong(RandomAccessFile input) throws IOException;
 
     byte readByte(RandomAccessFile input) throws IOException;
+
     short readShort(RandomAccessFile input) throws IOException;
+
     int readInt(RandomAccessFile input) throws IOException;
+
     long readLong(RandomAccessFile input) throws IOException;
 }
