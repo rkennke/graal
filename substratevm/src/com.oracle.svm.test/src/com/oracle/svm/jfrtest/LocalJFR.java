@@ -28,6 +28,7 @@ package com.oracle.svm.jfrtest;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -74,4 +75,80 @@ public class LocalJFR implements JFR {
             Files.deleteIfExists(recording.getDestination());
         }
     }
+
+    @Override
+    public long readRawLong(RandomAccessFile input) throws IOException {
+        return input.readLong();
+    }
+
+    @Override
+    public byte readByte(RandomAccessFile input) throws IOException {
+        return input.readByte();
+    }
+
+    @Override
+    public short readShort(RandomAccessFile input) throws IOException {
+        return (short) readLong(input);
+    }
+
+    @Override
+    public int readInt(RandomAccessFile input) throws IOException {
+        return (int) readLong(input);
+    }
+
+    @Override
+    public long readLong(RandomAccessFile input) throws IOException {
+        byte b0 = readByte(input);
+        long ret = (b0 & 0x7FL);
+        if (b0 >= 0) {
+            return ret;
+        }
+
+        int b1 = readByte(input);
+        ret += (b1 & 0x7FL) << 7;
+        if (b1 >= 0) {
+            return ret;
+        }
+
+        int b2 = readByte(input);
+        ret += (b2 & 0x7FL) << 14;
+        if (b2 >= 0) {
+            return ret;
+        }
+
+        int b3 = readByte(input);
+        ret += (b3 & 0x7FL) << 21;
+        if (b3 >= 0) {
+            return ret;
+        }
+
+        int b4 = readByte(input);
+        ret += (b4 & 0x7FL) << 28;
+        if (b4 >= 0) {
+            return ret;
+        }
+
+        int b5 = readByte(input);
+        ret += (b5 & 0x7FL) << 35;
+        if (b5 >= 0) {
+            return ret;
+        }
+
+        int b6 = readByte(input);
+        ret += (b6 & 0x7FL) << 42;
+        if (b6 >= 0) {
+            return ret;
+        }
+
+        int b7 = readByte(input);
+        ret += (b7 & 0x7FL) << 49;
+        if (b7 >= 0) {
+            return ret;
+
+        }
+
+        int b8 = readByte(input); // read last byte raw
+        return ret + (((long) (b8 & 0XFF)) << 56);
+    }
+
 }

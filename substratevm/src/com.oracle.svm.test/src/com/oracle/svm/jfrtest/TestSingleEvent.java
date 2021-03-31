@@ -31,6 +31,7 @@ import jdk.jfr.Recording;
 import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.io.RandomAccessFile;
 
 public class TestSingleEvent {
@@ -47,11 +48,26 @@ public class TestSingleEvent {
         jfr.endRecording(recording);
         try {
             RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
-            input.seek(23);
-            int cpoolPos = input.readByte();
-            assertEquals(68, cpoolPos);
+            input.seek(16);
+            long cpoolPos = jfr.readRawLong(input);
+            verifyConstantPools(jfr, input, cpoolPos);
         } finally {
             jfr.cleanupRecording(recording);
+        }
+    }
+
+    private void verifyConstantPools(JFR jfr, RandomAccessFile input, long cpoolPos) throws IOException {
+        input.seek(cpoolPos);
+        // TODO: When we actually parse the constant pool, we should verify the size.
+        jfr.readInt(input); // size
+        long typeId = jfr.readLong(input);
+        assertEquals(1, typeId);
+        jfr.readLong(input); // timestamp
+        jfr.readLong(input); // duration
+        long delta = jfr.readLong(input);
+        // TODO: Actually parse and verify constant pool here.
+        if (delta != 0) {
+            verifyConstantPools(jfr, input, cpoolPos + delta);
         }
     }
 
