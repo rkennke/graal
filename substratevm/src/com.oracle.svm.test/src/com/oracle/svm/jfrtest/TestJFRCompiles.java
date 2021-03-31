@@ -42,5 +42,6 @@ public class TestJFRCompiles {
         event.commit();
 
         jfr.endRecording(recording);
+        jfr.cleanupRecording(recording);
     }
 }
