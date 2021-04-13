@@ -34,6 +34,8 @@ import org.junit.Test;
 import java.io.IOException;
 
 public class TestSingleEvent {
+    private static final long METADATA_TYPE_ID = 0;
+    private static final long CONSTANT_POOL_TYPE_ID = 1;
 
     @Test
     public void test() throws Exception {
@@ -46,14 +48,26 @@ public class TestSingleEvent {
 
         jfr.endRecording(recording);
         try {
-            //RandomAccessFile input = new RandomAccessFile(recording.getDestination().toFile(), "r");
             RecordingInput input = new RecordingInput(recording.getDestination().toFile());
             input.position(16);
             long cpoolPos = input.readRawLong();
+            long metadataPos = input.readRawLong();
+            verifyMetadata(input, metadataPos);
             verifyConstantPools(input, cpoolPos);
         } finally {
             jfr.cleanupRecording(recording);
         }
+    }
+
+    private void verifyMetadata(RecordingInput input, long metadataPos) throws IOException {
+        input.position(metadataPos);
+        input.readInt(); // size
+        long id = input.readLong();
+        assertEquals(METADATA_TYPE_ID, id);
+        input.readLong(); // timestamp
+        input.readLong(); // duration
+        input.readLong(); // metadataId (seems to be always 0?)
+        MetadataDescriptor.read(input);
     }
 
     private void verifyConstantPools(RecordingInput input, long cpoolPos) throws IOException {
@@ -61,7 +75,7 @@ public class TestSingleEvent {
         // TODO: When we actually parse the constant pool, we should verify the size.
         input.readInt(); // size
         long typeId = input.readLong();
-        assertEquals(1, typeId);
+        assertEquals(CONSTANT_POOL_TYPE_ID, typeId);
         input.readLong(); // timestamp
         input.readLong(); // duration
         long delta = input.readLong();
