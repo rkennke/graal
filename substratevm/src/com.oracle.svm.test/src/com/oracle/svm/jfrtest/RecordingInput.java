@@ -41,9 +41,9 @@ public final class RecordingInput implements DataInput, AutoCloseable {
     public static final byte STRING_ENCODING_CHAR_ARRAY = 4;
     public static final byte STRING_ENCODING_LATIN1_BYTE_ARRAY = 5;
 
-    private final static int DEFAULT_BLOCK_SIZE = 16 * 1024 * 1024;
-    private final static Charset UTF8 = StandardCharsets.UTF_8;
-    private final static Charset LATIN1 = StandardCharsets.ISO_8859_1;
+    private static final int DEFAULT_BLOCK_SIZE = 16 * 1024 * 1024;
+    private static final Charset UTF8 = StandardCharsets.UTF_8;
+    private static final Charset LATIN1 = StandardCharsets.ISO_8859_1;
 
     private static final class Block {
         private byte[] bytes = new byte[0];
@@ -88,7 +88,7 @@ public final class RecordingInput implements DataInput, AutoCloseable {
     }
 
     @Override
-    public final byte readByte() throws IOException {
+    public byte readByte() throws IOException {
         if (!currentBlock.contains(position)) {
             position(position);
         }
@@ -96,7 +96,7 @@ public final class RecordingInput implements DataInput, AutoCloseable {
     }
 
     @Override
-    public final void readFully(byte[] dest, int offset, int length) throws IOException {
+    public void readFully(byte[] dest, int offset, int length) throws IOException {
         // TODO: Optimize, use Arrays.copy if all bytes are in current block
         // array
         for (int i = 0; i < length; i++) {
@@ -105,11 +105,11 @@ public final class RecordingInput implements DataInput, AutoCloseable {
     }
 
     @Override
-    public final void readFully(byte[] dst) throws IOException {
+    public void readFully(byte[] dst) throws IOException {
         readFully(dst, 0, dst.length);
     }
 
-    public final short readRawShort() throws IOException {
+    public short readRawShort() throws IOException {
         // copied from java.io.Bits
         byte b0 = readByte();
         byte b1 = readByte();
@@ -117,18 +117,18 @@ public final class RecordingInput implements DataInput, AutoCloseable {
     }
 
     @Override
-    public final double readDouble() throws IOException {
+    public double readDouble() throws IOException {
         // copied from java.io.Bits
         return Double.longBitsToDouble(readRawLong());
     }
 
     @Override
-    public final float readFloat() throws IOException {
+    public float readFloat() throws IOException {
         // copied from java.io.Bits
         return Float.intBitsToFloat(readRawInt());
     }
 
-    public final int readRawInt() throws IOException {
+    public int readRawInt() throws IOException {
         // copied from java.io.Bits
         byte b0 = readByte();
         byte b1 = readByte();
@@ -137,7 +137,7 @@ public final class RecordingInput implements DataInput, AutoCloseable {
         return ((b3 & 0xFF)) + ((b2 & 0xFF) << 8) + ((b1 & 0xFF) << 16) + ((b0) << 24);
     }
 
-    public final long readRawLong() throws IOException {
+    public long readRawLong() throws IOException {
         // copied from java.io.Bits
         byte b0 = readByte();
         byte b1 = readByte();
@@ -150,11 +150,11 @@ public final class RecordingInput implements DataInput, AutoCloseable {
         return ((b7 & 0xFFL)) + ((b6 & 0xFFL) << 8) + ((b5 & 0xFFL) << 16) + ((b4 & 0xFFL) << 24) + ((b3 & 0xFFL) << 32) + ((b2 & 0xFFL) << 40) + ((b1 & 0xFFL) << 48) + (((long) b0) << 56);
     }
 
-    public final long position() {
+    public long position() {
         return position;
     }
 
-    public final void position(long newPosition) throws IOException {
+    public void position(long newPosition) throws IOException {
         if (!currentBlock.contains(newPosition)) {
             if (!previousBlock.contains(newPosition)) {
                 if (newPosition > size()) {
@@ -191,23 +191,23 @@ public final class RecordingInput implements DataInput, AutoCloseable {
         return newPosition - blockSize / 2;
     }
 
-    public final long size() {
+    public long size() {
         return size;
     }
 
-    public final void close() throws IOException {
+    public void close() throws IOException {
         file.close();
     }
 
     @Override
-    public final int skipBytes(int n) throws IOException {
+    public int skipBytes(int n) throws IOException {
         long position = position();
         position(position + n);
         return (int) (position() - position);
     }
 
     @Override
-    public final boolean readBoolean() throws IOException {
+    public boolean readBoolean() throws IOException {
         return readByte() != 0;
     }
 
@@ -222,7 +222,7 @@ public final class RecordingInput implements DataInput, AutoCloseable {
     }
 
     @Override
-    public final String readLine() {
+    public String readLine() {
         throw new UnsupportedOperationException();
     }
 

@@ -27,7 +27,6 @@
 package com.oracle.svm.jfrtest;
 
 import java.io.IOException;
-import java.io.RandomAccessFile;
 
 import jdk.jfr.Recording;
 

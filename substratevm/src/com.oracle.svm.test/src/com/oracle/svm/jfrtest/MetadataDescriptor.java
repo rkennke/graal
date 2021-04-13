@@ -30,9 +30,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Metadata about a chunk
- */
 public final class MetadataDescriptor {
 
     static final class Attribute {
@@ -56,10 +53,11 @@ public final class MetadataDescriptor {
 
         long longValue(String name) {
             String v = attribute(name);
-            if (v != null)
+            if (v != null) {
                 return Long.parseLong(v);
-            else
+            } else {
                 throw new IllegalArgumentException(name);
+            }
         }
 
         String attribute(String name) {
@@ -130,56 +128,56 @@ public final class MetadataDescriptor {
             case "int":
                 int[] ints = (int[]) value;
                 for (int i = 0; i < ints.length; i++) {
-                    addAttribute(name  + "-" + i , ints[i]);
+                    addAttribute(name  + "-" + i, ints[i]);
                 }
                 break;
             case "long":
                 long[] longs = (long[]) value;
                 for (int i = 0; i < longs.length; i++) {
-                    addAttribute(name  + "-" + i , longs[i]);
+                    addAttribute(name  + "-" + i, longs[i]);
                 }
                 break;
             case "float":
                 float[] floats = (float[]) value;
                 for (int i = 0; i < floats.length; i++) {
-                    addAttribute(name  + "-" + i , floats[i]);
+                    addAttribute(name  + "-" + i, floats[i]);
                 }
                 break;
 
             case "double":
                 double[] doubles = (double[]) value;
                 for (int i = 0; i < doubles.length; i++) {
-                    addAttribute(name  + "-" + i , doubles[i]);
+                    addAttribute(name  + "-" + i, doubles[i]);
                 }
                 break;
             case "short":
                 short[] shorts = (short[]) value;
                 for (int i = 0; i < shorts.length; i++) {
-                    addAttribute(name  + "-" + i , shorts[i]);
+                    addAttribute(name  + "-" + i, shorts[i]);
                 }
                 break;
             case "char":
                 char[] chars = (char[]) value;
                 for (int i = 0; i < chars.length; i++) {
-                    addAttribute(name  + "-" + i , chars[i]);
+                    addAttribute(name  + "-" + i, chars[i]);
                 }
                 break;
             case "byte":
                 byte[] bytes = (byte[]) value;
                 for (int i = 0; i < bytes.length; i++) {
-                    addAttribute(name  + "-" + i , bytes[i]);
+                    addAttribute(name  + "-" + i, bytes[i]);
                 }
                 break;
             case "boolean":
                 boolean[] booleans = (boolean[]) value;
                 for (int i = 0; i < booleans.length; i++) {
-                    addAttribute(name  + "-" + i , booleans[i]);
+                    addAttribute(name  + "-" + i, booleans[i]);
                 }
                 break;
             case "java.lang.String":
                 String[] strings = (String[]) value;
                 for (int i = 0; i < strings.length; i++) {
-                    addAttribute(name  + "-" + i , strings[i]);
+                    addAttribute(name  + "-" + i, strings[i]);
                 }
                 break;
             default:

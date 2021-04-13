@@ -42,7 +42,7 @@ final class MetadataReader {
     private final List<String> pool;
     private final MetadataDescriptor descriptor;
 
-    public MetadataReader(DataInput input) throws IOException {
+    MetadataReader(DataInput input) throws IOException {
         this.input = input;
         int size = input.readInt();
         this.pool = new ArrayList<>(size);
