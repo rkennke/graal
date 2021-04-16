@@ -50,6 +50,9 @@ class SubstrateJVM {
     private final JfrStringRepository stringRepo;
     private final JfrSymbolRepository symbolRepo;
     private final JfrTypeRepository typeRepo;
+    private final JfrClassLoaderRepository classLoaderRepo;
+    private final JfrPackageRepository packageRepo;
+    private final JfrModuleRepository moduleRepo;
     private final JfrMethodRepository methodRepo;
     private final JfrStackTraceRepository stackTraceRepo;
     private final JfrRepository[] repositories;
@@ -77,10 +80,13 @@ class SubstrateJVM {
 
         stringRepo = new JfrStringRepository();
         symbolRepo = new JfrSymbolRepository();
-        typeRepo = new JfrTypeRepository(symbolRepo);
+        typeRepo = new JfrTypeRepository();
+        packageRepo = new JfrPackageRepository();
+        moduleRepo = new JfrModuleRepository();
+        classLoaderRepo = new JfrClassLoaderRepository();
         methodRepo = new JfrMethodRepository(typeRepo, symbolRepo);
         stackTraceRepo = new JfrStackTraceRepository(methodRepo);
-        repositories = new JfrRepository[]{stringRepo, symbolRepo, typeRepo, methodRepo, stackTraceRepo};
+        repositories = new JfrRepository[]{stringRepo, typeRepo, packageRepo, moduleRepo, classLoaderRepo, symbolRepo, methodRepo, stackTraceRepo};
 
         threadLocal = new JfrThreadLocal();
         globalMemory = new JfrGlobalMemory();
@@ -115,6 +121,26 @@ class SubstrateJVM {
     @Fold
     public static JfrTypeRepository getTypeRepository() {
         return get().typeRepo;
+    }
+
+    @Fold
+    public static JfrPackageRepository getPackageRepository() {
+        return get().packageRepo;
+    }
+
+    @Fold
+    public static JfrModuleRepository getModuleRepository() {
+        return get().moduleRepo;
+    }
+
+    @Fold
+    public static JfrClassLoaderRepository getClassLoaderRepository() {
+        return get().classLoaderRepo;
+    }
+
+    @Fold
+    public static JfrSymbolRepository getSymbolRepository() {
+        return get().symbolRepo;
     }
 
     @Fold

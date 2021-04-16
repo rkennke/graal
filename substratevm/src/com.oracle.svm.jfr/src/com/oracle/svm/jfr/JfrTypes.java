@@ -29,8 +29,11 @@ public enum JfrTypes {
     Class(20),
     String(21),
     StackTrace(23),
+    ClassLoader(37),
     Method(38),
     Symbol(39),
+    Module(56),
+    Package(57),
     Frametype(58);
 
     private final int id;

@@ -91,7 +91,7 @@ public class JfrSymbolRepository implements JfrRepository {
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
-    private long getSymbolId(String imageHeapString, boolean replaceDotWithSlash) {
+    public long getSymbolId(String imageHeapString, boolean replaceDotWithSlash) {
         assert Heap.getHeap().isInImageHeap(imageHeapString);
 
         JfrSymbol symbol = StackValue.get(JfrSymbol.class);

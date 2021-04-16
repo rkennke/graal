@@ -35,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.locks.ReentrantLock;
 
 import com.oracle.svm.core.thread.VMOperationControl;
+import com.oracle.svm.jfr.traceid.JfrTraceIdEpoch;
 import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -408,6 +409,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             // - Flush all thread-local buffers (native & Java) to global JFR memory.
             // - Set all Java EventWriter.notified values
             // - Change the epoch.
+            JfrTraceIdEpoch.getInstance().changeEpoch();
         }
     }
 }
