@@ -24,25 +24,19 @@
  */
 package com.oracle.svm.jfr;
 
-public enum JfrTypes {
-    // TODO: see JfrEvents, same TODOs apply here as well.
-    Class(20),
-    String(21),
-    StackTrace(23),
-    ClassLoader(37),
-    Method(38),
-    Symbol(39),
-    Module(56),
-    Package(57),
-    Frametype(58);
+import jdk.jfr.internal.Type;
+import jdk.jfr.internal.TypeLibrary;
 
-    private final int id;
+import java.util.List;
 
-    JfrTypes(int id) {
-        this.id = id;
-    }
-
-    public int getId() {
-        return id;
+public class JfrTypes {
+    public static long getTypeId(String typeName) {
+        List<Type> types = TypeLibrary.getInstance().getTypes();
+        for (Type type : types) {
+            if (typeName.equals(type.getName())) {
+                return type.getId();
+            }
+        }
+        return 0;
     }
 }

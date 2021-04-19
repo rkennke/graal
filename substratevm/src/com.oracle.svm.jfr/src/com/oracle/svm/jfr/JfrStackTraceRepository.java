@@ -104,7 +104,7 @@ public class JfrStackTraceRepository implements JfrRepository {
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
-        writer.writeCompressedLong(JfrTypes.StackTrace.getId());
+        writer.writeCompressedLong(JfrTypes.getTypeId("jdk.types.StackTrace"));
         writer.writeCompressedLong(table.getSize());
 
         // TODO: write the stack traces to the file

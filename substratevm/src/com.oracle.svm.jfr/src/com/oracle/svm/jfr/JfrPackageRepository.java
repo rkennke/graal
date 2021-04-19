@@ -68,7 +68,7 @@ public class JfrPackageRepository implements JfrRepository {
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
-        writer.writeCompressedLong(JfrTypes.Package.getId());
+        writer.writeCompressedLong(JfrTypes.getTypeId("jdk.types.Package"));
         writer.writeCompressedInt(packages.size());
 
         for (Map.Entry<String, PackageInfo> pkgInfo : packages.entrySet()) {

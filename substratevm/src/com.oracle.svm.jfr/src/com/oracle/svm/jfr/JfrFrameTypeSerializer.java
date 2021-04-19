@@ -36,7 +36,7 @@ public class JfrFrameTypeSerializer implements JfrSerializer {
 
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
-        writer.writeCompressedLong(JfrTypes.Frametype.getId());
+        writer.writeCompressedLong(JfrTypes.getTypeId("jdk.types.FrameType"));
 
         JfrFrameType[] values = JfrFrameType.values();
         writer.writeCompressedLong(values.length);

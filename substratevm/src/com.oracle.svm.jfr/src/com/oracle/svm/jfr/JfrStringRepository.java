@@ -57,7 +57,7 @@ public class JfrStringRepository implements JfrRepository {
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
-        writer.writeCompressedLong(JfrTypes.String.getId());
+        writer.writeCompressedLong(JfrTypes.getTypeId("java.lang.String"));
         writer.writeCompressedLong(0);
 
         // TODO: write encoding (null and empty String have special values as well)

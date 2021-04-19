@@ -81,7 +81,7 @@ public class JfrMethodRepository implements JfrRepository {
         if (count == 0) {
             return;
         }
-        writer.writeCompressedLong(JfrTypes.Method.getId());
+        writer.writeCompressedLong(JfrTypes.getTypeId("jdk.types.Method"));
         writer.writeCompressedLong(count);
 
         for (MethodInfo method : getMethodList()) {

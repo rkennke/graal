@@ -55,7 +55,7 @@ public class JfrModuleRepository implements JfrRepository {
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
-        writer.writeCompressedLong(JfrTypes.Module.getId());
+        writer.writeCompressedLong(JfrTypes.getTypeId("jdk.types.Module"));
         writer.writeCompressedInt(modules.size());
 
         for (Map.Entry<Module, Long> modInfo : modules.entrySet()) {

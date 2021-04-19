@@ -108,7 +108,7 @@ public class JfrSymbolRepository implements JfrRepository {
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
         JfrSymbolHashtable table = getTable(true);
-        writer.writeCompressedLong(JfrTypes.Symbol.getId());
+        writer.writeCompressedLong(JfrTypes.getTypeId("jdk.types.Symbol"));
         writer.writeCompressedLong(table.getSize());
 
         JfrSymbol[] entries = table.getTable();
