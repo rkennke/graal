@@ -57,7 +57,7 @@ public class JfrClassLoaderRepository implements JfrRepository {
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
-        writer.writeCompressedLong(JfrTypes.getTypeId("jdk.types.ClassLoader"));
+        writer.writeCompressedLong(JfrTypes.ClassLoader.getId());
         writer.writeCompressedInt(classLoaders.size());
 
         for (Map.Entry<ClassLoader, Long> clInfo : classLoaders.entrySet()) {

@@ -26,15 +26,12 @@ package com.oracle.svm.jfr;
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.jfr.traceid.JfrTraceId;
 import com.oracle.svm.jfr.traceid.JfrTraceIdEpoch;
 import com.oracle.svm.jfr.traceid.JfrTraceIdLoadBarrier;
-import jdk.jfr.internal.Type;
-import jdk.jfr.internal.TypeLibrary;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
@@ -54,7 +51,7 @@ public class JfrTypeRepository implements JfrRepository {
     @Override
     public void write(JfrChunkWriter writer) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
-        writer.writeCompressedLong(JfrTypes.getTypeId("java.lang.Class"));
+        writer.writeCompressedLong(JfrTypes.Class.getId());
         writer.writeCompressedInt((int) JfrTraceIdLoadBarrier.classCount(JfrTraceIdEpoch.getInstance().previousEpoch()));
 
         // Visit all used classes, and collect their packages, modules, classloaders and possibly referenced
