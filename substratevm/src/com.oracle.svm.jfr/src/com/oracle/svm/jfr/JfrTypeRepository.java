@@ -25,7 +25,9 @@
 package com.oracle.svm.jfr;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import com.oracle.svm.core.annotate.Uninterruptible;
@@ -38,6 +40,100 @@ import org.graalvm.nativeimage.Platforms;
 import com.oracle.svm.core.thread.VMOperation;
 
 public class JfrTypeRepository implements JfrRepository {
+    static class PackageInfo {
+        private final long id;
+        private final Module module;
+        PackageInfo(long id, Module module) {
+            this.id = id;
+            this.module = module;
+        }
+    }
+
+    static class TypeInfo {
+        private final Set<Class<?>> classes = new HashSet<>();
+        private final Map<String, PackageInfo> packages = new HashMap<>();
+        private final Map<Module, Long> modules = new HashMap<>();
+        private final Map<ClassLoader, Long> classLoaders = new HashMap<>();
+        private long currentPackageId = 0;
+        private long currentModuleId = 0;
+        private long currentClassLoaderId = 0;
+
+        boolean addClass(Class<?> clazz) {
+            if (!classes.contains(clazz)) {
+                classes.add(clazz);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        Set<Class<?>> getClasses() {
+            return classes;
+        }
+
+        boolean addPackage(Package pkg, Module module) {
+            if (!packages.containsKey(pkg.getName())) {
+                packages.put(pkg.getName(), new PackageInfo(++currentPackageId, module));
+                return true;
+            } else {
+                assert module == packages.get(pkg.getName()).module;
+                return false;
+            }
+        }
+
+        Map<String, PackageInfo> getPackages() {
+            return packages;
+        }
+
+        long getPackageId(Package pkg) {
+            if (pkg != null) {
+                return packages.get(pkg.getName()).id;
+            } else {
+                return 0;
+            }
+        }
+
+        boolean addModule(Module module) {
+            if (!modules.containsKey(module)) {
+                modules.put(module, ++currentModuleId);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        Map<Module, Long> getModules() {
+            return modules;
+        }
+
+        long getModuleId(Module module) {
+            if (module != null) {
+                return modules.get(module);
+            } else {
+                return 0;
+            }
+        }
+        boolean addClassLoader(ClassLoader classLoader) {
+            if (!classLoaders.containsKey(classLoader)) {
+                classLoaders.put(classLoader, ++currentClassLoaderId);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        Map<ClassLoader, Long> getClassLoaders() {
+            return classLoaders;
+        }
+
+        long getClassLoaderId(ClassLoader classLoader) {
+            if (classLoader != null) {
+                return classLoaders.get(classLoader);
+            } else {
+                return 0;
+            }
+        }
+    }
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrTypeRepository() {
@@ -49,68 +145,136 @@ public class JfrTypeRepository implements JfrRepository {
     }
 
     @Override
-    public void write(JfrChunkWriter writer) throws IOException {
+    public int write(JfrChunkWriter writer) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
-        writer.writeCompressedLong(JfrTypes.Class.getId());
-        writer.writeCompressedInt((int) JfrTraceIdLoadBarrier.classCount(JfrTraceIdEpoch.getInstance().previousEpoch()));
 
         // Visit all used classes, and collect their packages, modules, classloaders and possibly referenced
         // classes.
-        Set<Class<?>> newClasses = new HashSet<>();
-        JfrTraceIdLoadBarrier.ClassConsumer classVisitor = aClass -> visitClass(newClasses, aClass);
-        // Register all classes that we found on the way.
-        for (Class<?> clazz : newClasses) {
-            JfrTraceId.load(clazz);
-        }
+        TypeInfo typeInfo = new TypeInfo();
+        JfrTraceIdLoadBarrier.ClassConsumer classVisitor = aClass -> visitClass(typeInfo, aClass);
         JfrTraceIdLoadBarrier.doClasses(classVisitor, JfrTraceIdEpoch.getInstance().previousEpoch());
 
-        JfrTraceIdLoadBarrier.ClassConsumer kc = aClass -> writeClass(aClass, writer);
-        JfrTraceIdLoadBarrier.doClasses(kc, JfrTraceIdEpoch.getInstance().previousEpoch());
+        int count = writeClasses(writer, typeInfo);
+        count += writePackages(writer, typeInfo);
+        count += writeModules(writer, typeInfo);
+        count += writeClassLoaders(writer, typeInfo);
+        System.out.println("type repo: " + count);
+        return count;
     }
 
-    private void visitClass(Set<Class<?>> newClasses, Class<?> clazz) {
-        if (clazz != null && !newClasses.contains(clazz)) {
-            newClasses.add(clazz);
-            visitPackage(newClasses, clazz.getPackage(), clazz.getModule());
-            visitClass(newClasses, clazz.getSuperclass());
+    private void visitClass(TypeInfo typeInfo, Class<?> clazz) {
+        if (clazz != null && typeInfo.addClass(clazz)) {
+            System.out.println("adding class: " + clazz);
+            visitPackage(typeInfo, clazz.getPackage(), clazz.getModule());
+            visitClass(typeInfo, clazz.getSuperclass());
         }
     }
 
-    private void visitPackage(Set<Class<?>> newClasses, Package pkg, Module module) {
-        if (pkg != null && SubstrateJVM.getPackageRepository().addPackage(pkg, module)) {
-            visitModule(newClasses, module);
+    private void visitPackage(TypeInfo typeInfo, Package pkg, Module module) {
+        if (pkg != null && typeInfo.addPackage(pkg, module)) {
+            visitModule(typeInfo, module);
         }
     }
 
-    private void visitModule(Set<Class<?>> newClasses, Module module) {
-        if (module != null && SubstrateJVM.getModuleRepository().addModule(module)) {
-            visitClassLoader(newClasses, module.getClassLoader());
+    private void visitModule(TypeInfo typeInfo, Module module) {
+        if (module != null && typeInfo.addModule(module)) {
+            visitClassLoader(typeInfo, module.getClassLoader());
         }
     }
 
-    private void visitClassLoader(Set<Class<?>> newClasses, ClassLoader classLoader) {
-        if (classLoader != null && SubstrateJVM.getClassLoaderRepository().addClassLoader(classLoader)) {
-            visitClass(newClasses, classLoader.getClass());
+    private void visitClassLoader(TypeInfo typeInfo, ClassLoader classLoader) {
+        if (classLoader != null && typeInfo.addClassLoader(classLoader)) {
+            visitClass(typeInfo, classLoader.getClass());
         }
     }
 
-    private void writeClass(Class<?> clazz, JfrChunkWriter writer) {
+    public int writeClasses(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
+        if (typeInfo.getClasses().size() == 0) {
+            return 0;
+        }
+        writer.writeCompressedLong(JfrTypes.Class.getId());
+        writer.writeCompressedInt((int) JfrTraceIdLoadBarrier.classCount(JfrTraceIdEpoch.getInstance().previousEpoch()));
+
+        for (Class<?> clazz : typeInfo.getClasses()) {
+            writeClass(writer, typeInfo, clazz);
+        }
+        return 1;
+    }
+
+    private void writeClass(JfrChunkWriter writer, TypeInfo typeInfo, Class<?> clazz) throws IOException {
         JfrSymbolRepository symbolRepo = SubstrateJVM.getSymbolRepository();
-        JfrClassLoaderRepository classLoaderRepo = SubstrateJVM.getClassLoaderRepository();
-        JfrPackageRepository packageRepo = SubstrateJVM.getPackageRepository();
-        try {
-            writer.writeCompressedLong(JfrTraceId.getTraceId(clazz));  // key
-            writer.writeCompressedLong(classLoaderRepo.getClassLoaderId(clazz.getClassLoader()));
-            writer.writeCompressedLong(symbolRepo.getSymbolId(clazz));
-            writer.writeCompressedLong(packageRepo.getPackageId(clazz.getPackage()));
-            writer.writeCompressedLong(clazz.getModifiers());
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
-        }
+        writer.writeCompressedLong(JfrTraceId.getTraceId(clazz));  // key
+        writer.writeCompressedLong(typeInfo.getClassLoaderId(clazz.getClassLoader()));
+        writer.writeCompressedLong(symbolRepo.getSymbolId(clazz.getName(), true, true));
+        writer.writeCompressedLong(typeInfo.getPackageId(clazz.getPackage()));
+        writer.writeCompressedLong(clazz.getModifiers());
     }
 
-    @Override
-    public boolean hasItems() {
-        return JfrTraceIdLoadBarrier.classCount(JfrTraceIdEpoch.getInstance().previousEpoch()) > 0;
+    private int writePackages(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
+        Map<String, PackageInfo> packages = typeInfo.getPackages();
+        if (packages.size() == 0) {
+            return 0;
+        }
+        writer.writeCompressedLong(JfrTypes.Package.getId());
+        writer.writeCompressedInt(packages.size());
+
+        for (Map.Entry<String, PackageInfo> pkgInfo : packages.entrySet()) {
+            writePackage(writer, typeInfo, pkgInfo.getKey(), pkgInfo.getValue());
+        }
+        return 1;
+    }
+
+    private void writePackage(JfrChunkWriter writer, TypeInfo typeInfo, String pkgName, PackageInfo pkgInfo) throws IOException {
+        JfrSymbolRepository symbolRepo = SubstrateJVM.getSymbolRepository();
+        writer.writeCompressedLong(pkgInfo.id);  // id
+        writer.writeCompressedLong(symbolRepo.getSymbolId(pkgName, true, true));
+        writer.writeCompressedLong(typeInfo.getModuleId(pkgInfo.module));
+        writer.writeBoolean(false); // what's this?
+    }
+
+    private int writeModules(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
+        assert VMOperation.isInProgressAtSafepoint();
+        Map<Module, Long> modules = typeInfo.getModules();
+        if (modules.size() == 0) {
+            return 0;
+        }
+        writer.writeCompressedLong(JfrTypes.Module.getId());
+        writer.writeCompressedInt(modules.size());
+
+        for (Map.Entry<Module, Long> modInfo : modules.entrySet()) {
+            writeModule(writer, typeInfo, modInfo.getKey(), modInfo.getValue());
+        }
+        return 1;
+    }
+
+    private void writeModule(JfrChunkWriter writer, TypeInfo typeInfo, Module module, long id) throws IOException {
+        JfrSymbolRepository symbolRepo = SubstrateJVM.getSymbolRepository();
+        writer.writeCompressedLong(id);
+        writer.writeCompressedLong(symbolRepo.getSymbolId(module.getName()));
+        writer.writeCompressedLong(0); // Version?
+        writer.writeCompressedLong(0); // Location?
+        writer.writeCompressedLong(typeInfo.getClassLoaderId(module.getClassLoader()));
+    }
+
+    private int writeClassLoaders(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
+        assert VMOperation.isInProgressAtSafepoint();
+        Map<ClassLoader, Long> classLoaders = typeInfo.getClassLoaders();
+        if (classLoaders.size() == 0) {
+            return 0;
+        }
+        writer.writeCompressedLong(JfrTypes.ClassLoader.getId());
+        writer.writeCompressedInt(classLoaders.size());
+
+        for (Map.Entry<ClassLoader, Long> clInfo : classLoaders.entrySet()) {
+            writeClassLoader(writer, clInfo.getKey(), clInfo.getValue());
+        }
+        return 1;
+    }
+
+    private void writeClassLoader(JfrChunkWriter writer, ClassLoader cl, long id) throws IOException {
+        JfrSymbolRepository symbolRepo = SubstrateJVM.getSymbolRepository();
+        writer.writeCompressedLong(id);
+        writer.writeCompressedLong(JfrTraceId.getTraceId(cl.getClass()));
+        writer.writeCompressedLong(symbolRepo.getSymbolId(cl.getName()));
     }
 }

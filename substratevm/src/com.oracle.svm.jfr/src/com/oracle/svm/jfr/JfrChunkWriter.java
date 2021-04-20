@@ -195,41 +195,35 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         writeCompressedLong(0); // duration
         writeCompressedLong(0); // deltaToNext
         file.writeBoolean(true); // flush
-        int count = 0;
-        // TODO: This should be simplified, serializers and repositories can probably go under the same
-        // structure.
-        for (JfrSerializer serializer : serializers) {
-            if (serializer.hasItems()) {
-                count++;
-            }
-        }
-        for (JfrRepository repository : repositories) {
-            if (repository.hasItems()) {
-                count++;
-            }
-        }
-        writeCompressedInt(count); // pools size
-        writeSerializers(serializers);
-        writeRepositories(repositories);
+        long countPos = file.getFilePointer();
+        file.writeInt(0); // Pool count. We'll fix this later.
+        // TODO: This should be simplified, serializers and repositories can probably go under the same structure.
+        int count = writeSerializers(serializers);
+        count += writeRepositories(repositories);
+        long currentPos = file.getFilePointer();
+        file.seek(countPos);
+        file.writeInt(makePaddedInt(count)); // Pool count.
+        file.seek(currentPos);
         endEvent(start);
 
         return start;
     }
 
-    private void writeSerializers(JfrSerializer[] serializers) throws IOException {
+    private int writeSerializers(JfrSerializer[] serializers) throws IOException {
+        int count = 0;
         for (JfrSerializer serializer : serializers) {
-            if (serializer.hasItems()) {
-                serializer.write(this);
-            }
+            count += serializer.write(this);
         }
+        return count;
     }
 
-    private void writeRepositories(JfrRepository[] constantPools) throws IOException {
+    private int writeRepositories(JfrRepository[] constantPools) throws IOException {
+        int count = 0;
         for (JfrRepository constantPool : constantPools) {
-            if (constantPool.hasItems()) {
-                constantPool.write(this);
-            }
+            int poolCount = constantPool.write(this);
+            count += poolCount;
         }
+        return count;
     }
 
     private long writeMetadataEvent(byte[] metadataDescriptor) throws IOException {
