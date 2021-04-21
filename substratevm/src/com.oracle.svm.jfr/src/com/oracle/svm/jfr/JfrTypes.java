@@ -32,20 +32,20 @@ import org.graalvm.nativeimage.Platforms;
 import java.util.List;
 
 public enum JfrTypes {
-    Class(getTypeId("java.lang.Class")),
-    String(getTypeId("java.lang.String")),
-    StackTrace(getTypeId("jdk.types.StackTrace")),
-    ClassLoader(getTypeId("jdk.types.ClassLoader")),
-    Method(getTypeId("jdk.types.Method")),
-    Symbol(getTypeId("jdk.types.Symbol")),
-    Module(getTypeId("jdk.types.Module")),
-    Package(getTypeId("jdk.types.Package")),
-    FrameType(getTypeId("jdk.types.FrameType"));
+    Class("java.lang.Class"),
+    String("java.lang.String"),
+    StackTrace("jdk.types.StackTrace"),
+    ClassLoader("jdk.types.ClassLoader"),
+    Method("jdk.types.Method"),
+    Symbol("jdk.types.Symbol"),
+    Module("jdk.types.Module"),
+    Package("jdk.types.Package"),
+    FrameType("jdk.types.FrameType");
 
     private final long id;
 
-    JfrTypes(long id) {
-        this.id = id;
+    JfrTypes(String name) {
+        this.id = getTypeId(name);
     }
 
     public long getId() {
