@@ -89,8 +89,8 @@ public class JfrMethodRepository implements JfrRepository {
             if (usedMethods[id]) {
                 usedMethods[id] = false;
                 writer.writeCompressedLong(classRepo.getClassId(method.getParentClass()));
-                writer.writeCompressedLong(symbolRepo.getSymbolId(method.getName()));
-                writer.writeCompressedLong(symbolRepo.getSymbolId(method.getSignature()));
+                writer.writeCompressedLong(symbolRepo.getSymbolId(method.getName(), false));
+                writer.writeCompressedLong(symbolRepo.getSymbolId(method.getSignature(), false));
                 writer.writeCompressedInt(0); // package id
                 writer.writeBoolean(false); // hidden
             }

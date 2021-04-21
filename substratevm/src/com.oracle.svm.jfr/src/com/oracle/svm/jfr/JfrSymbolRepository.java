@@ -81,17 +81,17 @@ public class JfrSymbolRepository implements JfrRepository {
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
-    public long getSymbolId(Class<?> clazz) {
-        return getSymbolId(clazz.getName(), true, false);
+    public long getSymbolId(Class<?> clazz, boolean previousEpoch) {
+        return getSymbolId(clazz.getName(), previousEpoch, true);
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
-    public long getSymbolId(String imageHeapString) {
-        return getSymbolId(imageHeapString, false, false);
+    public long getSymbolId(String imageHeapString, boolean previousEpoch) {
+        return getSymbolId(imageHeapString, previousEpoch, false);
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
-    public long getSymbolId(String imageHeapString, boolean replaceDotWithSlash, boolean previousEpoch) {
+    public long getSymbolId(String imageHeapString, boolean previousEpoch, boolean replaceDotWithSlash) {
         assert Heap.getHeap().isInImageHeap(imageHeapString);
 
         JfrSymbol symbol = StackValue.get(JfrSymbol.class);
