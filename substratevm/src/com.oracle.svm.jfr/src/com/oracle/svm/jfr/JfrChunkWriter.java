@@ -195,14 +195,14 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         writeCompressedLong(0); // duration
         writeCompressedLong(0); // deltaToNext
         file.writeBoolean(true); // flush
-        long countPos = file.getFilePointer();
-        file.writeInt(0); // Pool count. We'll fix this later.
+        long poolCountPos = file.getFilePointer();
+        file.writeInt(0); // We'll fix this later.
         // TODO: This should be simplified, serializers and repositories can probably go under the same structure.
-        int count = writeSerializers(serializers);
-        count += writeRepositories(repositories);
+        int poolCount = writeSerializers(serializers);
+        poolCount += writeRepositories(repositories);
         long currentPos = file.getFilePointer();
-        file.seek(countPos);
-        file.writeInt(makePaddedInt(count)); // Pool count.
+        file.seek(poolCountPos);
+        file.writeInt(makePaddedInt(poolCount));
         file.seek(currentPos);
         endEvent(start);
 
