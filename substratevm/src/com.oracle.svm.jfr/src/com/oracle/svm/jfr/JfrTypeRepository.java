@@ -222,7 +222,7 @@ public class JfrTypeRepository implements JfrRepository {
         writer.writeCompressedLong(pkgInfo.id);  // id
         writer.writeCompressedLong(symbolRepo.getSymbolId(pkgName, true, true));
         writer.writeCompressedLong(typeInfo.getModuleId(pkgInfo.module));
-        writer.writeBoolean(false); // what's this?
+        writer.writeBoolean(false); // TODO: 'exported' field: what's this?
     }
 
     private int writeModules(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
