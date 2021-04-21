@@ -158,13 +158,11 @@ public class JfrTypeRepository implements JfrRepository {
         count += writePackages(writer, typeInfo);
         count += writeModules(writer, typeInfo);
         count += writeClassLoaders(writer, typeInfo);
-        System.out.println("type repo: " + count);
         return count;
     }
 
     private void visitClass(TypeInfo typeInfo, Class<?> clazz) {
         if (clazz != null && typeInfo.addClass(clazz)) {
-            System.out.println("adding class: " + clazz);
             visitPackage(typeInfo, clazz.getPackage(), clazz.getModule());
             visitClass(typeInfo, clazz.getSuperclass());
         }
