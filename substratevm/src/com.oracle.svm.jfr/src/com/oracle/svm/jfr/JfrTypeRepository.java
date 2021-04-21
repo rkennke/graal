@@ -59,12 +59,7 @@ public class JfrTypeRepository implements JfrRepository {
         private long currentClassLoaderId = 0;
 
         boolean addClass(Class<?> clazz) {
-            if (!classes.contains(clazz)) {
-                classes.add(clazz);
-                return true;
-            } else {
-                return false;
-            }
+            return classes.add(clazz);
         }
 
         Set<Class<?>> getClasses() {
@@ -187,7 +182,7 @@ public class JfrTypeRepository implements JfrRepository {
     }
 
     public int writeClasses(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
-        if (typeInfo.getClasses().size() == 0) {
+        if (typeInfo.getClasses().isEmpty()) {
             return 0;
         }
         writer.writeCompressedLong(JfrTypes.Class.getId());
@@ -210,7 +205,7 @@ public class JfrTypeRepository implements JfrRepository {
 
     private int writePackages(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
         Map<String, PackageInfo> packages = typeInfo.getPackages();
-        if (packages.size() == 0) {
+        if (packages.isEmpty()) {
             return 0;
         }
         writer.writeCompressedLong(JfrTypes.Package.getId());
@@ -233,7 +228,7 @@ public class JfrTypeRepository implements JfrRepository {
     private int writeModules(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
         Map<Module, Long> modules = typeInfo.getModules();
-        if (modules.size() == 0) {
+        if (modules.isEmpty()) {
             return 0;
         }
         writer.writeCompressedLong(JfrTypes.Module.getId());
@@ -257,7 +252,7 @@ public class JfrTypeRepository implements JfrRepository {
     private int writeClassLoaders(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
         assert VMOperation.isInProgressAtSafepoint();
         Map<ClassLoader, Long> classLoaders = typeInfo.getClassLoaders();
-        if (classLoaders.size() == 0) {
+        if (classLoaders.isEmpty()) {
             return 0;
         }
         writer.writeCompressedLong(JfrTypes.ClassLoader.getId());
