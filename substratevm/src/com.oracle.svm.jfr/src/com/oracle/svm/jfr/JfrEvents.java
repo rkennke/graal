@@ -27,6 +27,9 @@ package com.oracle.svm.jfr;
 import com.oracle.svm.core.annotate.Uninterruptible;
 import jdk.jfr.EventType;
 import jdk.jfr.internal.MetadataRepository;
+import org.graalvm.compiler.core.common.NumUtil;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 
 import java.util.List;
 
@@ -40,10 +43,12 @@ public enum JfrEvents {
 
     private final long id;
 
+    @Platforms(Platform.HOSTED_ONLY.class)
     JfrEvents(String name) {
         this.id = getEventTypeId(name);
     }
 
+    @Platforms(Platform.HOSTED_ONLY.class)
     private static long getEventTypeId(String name) {
         MetadataRepository metadata = MetadataRepository.getInstance();
         List<EventType> eventTypes = metadata.getRegisteredEventTypes();
@@ -60,6 +65,7 @@ public enum JfrEvents {
         return id;
     }
 
+    @Platforms(Platform.HOSTED_ONLY.class)
     public static int getEventCount() {
         MetadataRepository metadata = MetadataRepository.getInstance();
         List<EventType> eventTypes = metadata.getRegisteredEventTypes();
@@ -67,7 +73,6 @@ public enum JfrEvents {
         for (EventType eventType : eventTypes) {
             maxEventId = Math.max(maxEventId, eventType.getId());
         }
-        assert maxEventId + 1 < Integer.MAX_VALUE;
-        return (int) maxEventId + 1;
+        return NumUtil.safeToInt(maxEventId + 1);
     }
 }
