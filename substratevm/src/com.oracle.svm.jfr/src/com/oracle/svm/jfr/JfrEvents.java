@@ -25,33 +25,49 @@
 package com.oracle.svm.jfr;
 
 import com.oracle.svm.core.annotate.Uninterruptible;
+import jdk.jfr.EventType;
+import jdk.jfr.internal.MetadataRepository;
+
+import java.util.List;
 
 /**
  * The event IDs depend on the metadata.xml and therefore vary between JDK versions.
  */
 public enum JfrEvents {
-    // TODO: we need to abstract the JDK version in some way.
-    // Event IDs should be fetched similar to how we do it in JfrTypes.
-    MetadataEvent(0),
-    CheckpointEvent(1),
-    ThreadStartEvent(255),
-    ThreadEndEvent(256),
-    DataLossEvent(335);
+    ThreadStartEvent("jdk.ThreadStart"),
+    ThreadEndEvent("jdk.ThreadEnd"),
+    DataLossEvent("jdk.DataLoss");
 
-    private final int id;
+    private final long id;
 
-    JfrEvents(int id) {
-        this.id = id;
+    JfrEvents(String name) {
+        this.id = getEventTypeId(name);
+    }
+
+    private static long getEventTypeId(String name) {
+        MetadataRepository metadata = MetadataRepository.getInstance();
+        List<EventType> eventTypes = metadata.getRegisteredEventTypes();
+        for (EventType eventType : eventTypes) {
+            if (name.equals(eventType.getName())) {
+                return eventType.getId();
+            }
+        }
+        return 0;
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    public int getId() {
+    public long getId() {
         return id;
     }
 
     public static int getEventCount() {
-        // TODO: needs to return the count of all native events that are defined in the metadata.xml
-        // file. The highest id must match "eventCount - 1".
-        return 400;
+        MetadataRepository metadata = MetadataRepository.getInstance();
+        List<EventType> eventTypes = metadata.getRegisteredEventTypes();
+        long maxEventId = 0;
+        for (EventType eventType : eventTypes) {
+            maxEventId = Math.max(maxEventId, eventType.getId());
+        }
+        assert maxEventId + 1 < Integer.MAX_VALUE;
+        return (int) maxEventId + 1;
     }
 }
