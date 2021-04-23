@@ -26,10 +26,6 @@ package com.oracle.svm.jfr;
 
 import java.util.List;
 
-import com.oracle.svm.core.annotate.Uninterruptible;
-import com.oracle.svm.core.jdk.JDK11_0_11OrEarlier;
-import com.oracle.svm.core.jdk.JDK11_0_12OrLater;
-import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.jfr.traceid.JfrTraceId;
 import com.oracle.svm.jfr.traceid.JfrTraceIdEpoch;
 import org.graalvm.nativeimage.ProcessProperties;
@@ -314,23 +310,13 @@ public final class Target_jdk_jfr_internal_JVM {
 
     /** See {@link JVM#addStringConstant}. */
     @Substitute
-    @TargetElement(onlyWith = JDK11_0_11OrEarlier.class)
-    @Uninterruptible(reason = "Epoch must not change while in this method.")
     public static boolean addStringConstant(boolean epoch, long id, String s) {
         // This 'implementation' will cause the EventWriter to always write strings by value.
         return !epoch;
     }
 
-    /** See {@link JVM#addStringConstant}. */
-    @Substitute
-    @TargetElement(onlyWith = JDK11_0_12OrLater.class)
-    public static boolean addStringConstant(long id, String s) {
-        throw VMError.unimplemented();
-    }
-
     /** See {@link JVM#getEpochAddress}. */
     @Substitute
-    @TargetElement(onlyWith = JDK11_0_11OrEarlier.class)
     public long getEpochAddress() {
         // Should go away with backport of JDK-8257621
         return JfrTraceIdEpoch.getInstance().getEpochAddress();
