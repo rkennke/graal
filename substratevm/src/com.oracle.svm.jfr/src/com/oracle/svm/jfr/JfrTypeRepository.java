@@ -248,7 +248,7 @@ public class JfrTypeRepository implements JfrRepository {
         if (name == null) {
             name = "unnamed module";
         }
-        writer.writeCompressedLong(symbolRepo.getSymbolId(name,true));
+        writer.writeCompressedLong(symbolRepo.getSymbolId(name, true));
         writer.writeCompressedLong(0); // Version?
         writer.writeCompressedLong(0); // Location?
         writer.writeCompressedLong(typeInfo.getClassLoaderId(module.getClassLoader()));
