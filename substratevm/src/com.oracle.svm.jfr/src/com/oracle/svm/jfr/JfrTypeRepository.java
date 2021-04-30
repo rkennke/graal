@@ -244,13 +244,9 @@ public class JfrTypeRepository implements JfrRepository {
     private void writeModule(JfrChunkWriter writer, TypeInfo typeInfo, Module module, long id) throws IOException {
         JfrSymbolRepository symbolRepo = SubstrateJVM.getSymbolRepository();
         writer.writeCompressedLong(id);
-        String name = module.getName();
-        if (name == null) {
-            name = "unnamed module";
-        }
-        writer.writeCompressedLong(symbolRepo.getSymbolId(name, true));
-        writer.writeCompressedLong(0); // Version?
-        writer.writeCompressedLong(0); // Location?
+        writer.writeCompressedLong(symbolRepo.getSymbolId(module.getName(), true));
+        writer.writeCompressedLong(0); // Version? E.g. "11.0.10-internal"
+        writer.writeCompressedLong(0); // Location? E.g. "jrt:/java.base"
         writer.writeCompressedLong(typeInfo.getClassLoaderId(module.getClassLoader()));
     }
 
