@@ -36,5 +36,5 @@ import jdk.jfr.StackTrace;
 @StackTrace(false)
 public class ClassEvent extends Event {
 
-    @Label("Class") public Class clazz;
+    @Label("Class") public Class<?> clazz;
 }

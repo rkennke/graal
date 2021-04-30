@@ -174,8 +174,8 @@ public final class RecordingInput implements DataInput, AutoCloseable {
         position = newPosition;
     }
 
-    private long trimToFileSize(long position) {
-        return Math.min(size(), Math.max(0, position));
+    private long trimToFileSize(long pos) {
+        return Math.min(size(), Math.max(0, pos));
     }
 
     private long calculateBlockStart(long newPosition) {
@@ -195,15 +195,16 @@ public final class RecordingInput implements DataInput, AutoCloseable {
         return size;
     }
 
+    @Override
     public void close() throws IOException {
         file.close();
     }
 
     @Override
     public int skipBytes(int n) throws IOException {
-        long position = position();
-        position(position + n);
-        return (int) (position() - position);
+        long pos = position();
+        position(pos + n);
+        return (int) (position() - pos);
     }
 
     @Override
@@ -255,15 +256,15 @@ public final class RecordingInput implements DataInput, AutoCloseable {
         if (encoding == STRING_ENCODING_EMPTY_STRING) {
             return "";
         }
-        int size = readInt();
+        int length = readInt();
         if (encoding == STRING_ENCODING_CHAR_ARRAY) {
-            char[] c = new char[size];
-            for (int i = 0; i < size; i++) {
+            char[] c = new char[length];
+            for (int i = 0; i < length; i++) {
                 c[i] = readChar();
             }
             return new String(c);
         }
-        byte[] bytes = new byte[size];
+        byte[] bytes = new byte[length];
         readFully(bytes); // TODO: optimize, check size, and copy only if needed
         if (encoding == STRING_ENCODING_UTF8_BYTE_ARRAY) {
             return new String(bytes, UTF8);

@@ -59,7 +59,7 @@ public class TestSingleEvent {
         }
     }
 
-    private void verifyMetadata(RecordingInput input, long metadataPos) throws IOException {
+    private static void verifyMetadata(RecordingInput input, long metadataPos) throws IOException {
         input.position(metadataPos);
         input.readInt(); // size
         long id = input.readLong();

@@ -51,18 +51,9 @@ public final class MetadataDescriptor {
             this.name = name;
         }
 
-        long longValue(String name) {
-            String v = attribute(name);
-            if (v != null) {
-                return Long.parseLong(v);
-            } else {
-                throw new IllegalArgumentException(name);
-            }
-        }
-
-        String attribute(String name) {
+        String attribute(String attrName) {
             for (Attribute a : attributes) {
-                if (a.name.equals(name)) {
+                if (a.name.equals(attrName)) {
                     return a.value;
                 }
             }
@@ -80,16 +71,16 @@ public final class MetadataDescriptor {
             return sb.toString();
         }
 
-        long attribute(String name, long defaultValue) {
-            String text = attribute(name);
+        long attribute(String attrName, long defaultValue) {
+            String text = attribute(attrName);
             if (text == null) {
                 return defaultValue;
             }
             return Long.parseLong(text);
         }
 
-        String attribute(String name, String defaultValue) {
-            String text = attribute(name);
+        String attribute(String attrName, String defaultValue) {
+            String text = attribute(attrName);
             if (text == null) {
                 return defaultValue;
             }
@@ -98,9 +89,9 @@ public final class MetadataDescriptor {
 
         List<Element> elements(String... names) {
             List<Element> filteredElements = new ArrayList<>();
-            for (String name : names) {
+            for (String elementName : names) {
                 for (Element e : elements) {
-                    if (e.name.equals(name)) {
+                    if (e.name.equals(elementName)) {
                         filteredElements.add(e);
                     }
                 }
@@ -112,77 +103,8 @@ public final class MetadataDescriptor {
             elements.add(element);
         }
 
-        void addAttribute(String name, Object value) {
-            attributes.add(new Attribute(name, String.valueOf(value)));
-        }
-
-        Element newChild(String name) {
-            Element e = new Element(name);
-            elements.add(e);
-            return e;
-        }
-
-        public void addArrayAttribute(Element element, String name, Object value) {
-            String typeName = value.getClass().getComponentType().getName();
-            switch (typeName) {
-            case "int":
-                int[] ints = (int[]) value;
-                for (int i = 0; i < ints.length; i++) {
-                    addAttribute(name  + "-" + i, ints[i]);
-                }
-                break;
-            case "long":
-                long[] longs = (long[]) value;
-                for (int i = 0; i < longs.length; i++) {
-                    addAttribute(name  + "-" + i, longs[i]);
-                }
-                break;
-            case "float":
-                float[] floats = (float[]) value;
-                for (int i = 0; i < floats.length; i++) {
-                    addAttribute(name  + "-" + i, floats[i]);
-                }
-                break;
-
-            case "double":
-                double[] doubles = (double[]) value;
-                for (int i = 0; i < doubles.length; i++) {
-                    addAttribute(name  + "-" + i, doubles[i]);
-                }
-                break;
-            case "short":
-                short[] shorts = (short[]) value;
-                for (int i = 0; i < shorts.length; i++) {
-                    addAttribute(name  + "-" + i, shorts[i]);
-                }
-                break;
-            case "char":
-                char[] chars = (char[]) value;
-                for (int i = 0; i < chars.length; i++) {
-                    addAttribute(name  + "-" + i, chars[i]);
-                }
-                break;
-            case "byte":
-                byte[] bytes = (byte[]) value;
-                for (int i = 0; i < bytes.length; i++) {
-                    addAttribute(name  + "-" + i, bytes[i]);
-                }
-                break;
-            case "boolean":
-                boolean[] booleans = (boolean[]) value;
-                for (int i = 0; i < booleans.length; i++) {
-                    addAttribute(name  + "-" + i, booleans[i]);
-                }
-                break;
-            case "java.lang.String":
-                String[] strings = (String[]) value;
-                for (int i = 0; i < strings.length; i++) {
-                    addAttribute(name  + "-" + i, strings[i]);
-                }
-                break;
-            default:
-                throw new InternalError("Array type of " + typeName + " is not supported");
-            }
+        void addAttribute(String attrName, Object value) {
+            attributes.add(new Attribute(attrName, String.valueOf(value)));
         }
     }
 
