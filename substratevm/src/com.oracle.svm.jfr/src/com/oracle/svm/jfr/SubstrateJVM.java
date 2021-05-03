@@ -80,7 +80,8 @@ class SubstrateJVM {
         typeRepo = new JfrTypeRepository();
         methodRepo = new JfrMethodRepository(typeRepo, symbolRepo);
         stackTraceRepo = new JfrStackTraceRepository(methodRepo);
-        repositories = new JfrRepository[]{stringRepo, typeRepo, symbolRepo, methodRepo, stackTraceRepo};
+        JfrFrameTypeSerializer frameTypeSerializer = new JfrFrameTypeSerializer();
+        repositories = new JfrRepository[]{frameTypeSerializer, stringRepo, typeRepo, symbolRepo, methodRepo, stackTraceRepo};
 
         threadLocal = new JfrThreadLocal();
         globalMemory = new JfrGlobalMemory();
