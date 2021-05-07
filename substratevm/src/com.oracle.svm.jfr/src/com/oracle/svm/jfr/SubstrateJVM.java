@@ -83,9 +83,7 @@ class SubstrateJVM {
         JfrFrameTypeSerializer frameTypeSerializer = new JfrFrameTypeSerializer();
         // NOTE: The ordering of repositories in the array dictates the order in which the repositories
         // (constant pools) will be written in the recording.
-        // TODO: We might need to write symbolRepo after methodRepo and/or stackTraceRepo, if they emit any
-        // symbols.
-        repositories = new JfrRepository[]{frameTypeSerializer, stringRepo, typeRepo, symbolRepo, methodRepo, stackTraceRepo};
+        repositories = new JfrRepository[]{frameTypeSerializer, stringRepo, typeRepo, methodRepo, stackTraceRepo, symbolRepo};
 
         threadLocal = new JfrThreadLocal();
         globalMemory = new JfrGlobalMemory();
