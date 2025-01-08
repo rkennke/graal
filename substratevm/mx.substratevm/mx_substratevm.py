@@ -575,9 +575,8 @@ def native_unittests_task(extra_build_args=None):
             out.write(f"Simple file{i}" + '\n')
 
     additional_build_args = svm_experimental_options([
-        '-H:-JfrTrimInternalStackTraces',
-        '-H:AdditionalSecurityProviders=com.oracle.svm.test.SecurityServiceTest$NoOpProvider',
-        '-H:AdditionalSecurityServiceTypes=com.oracle.svm.test.SecurityServiceTest$JCACompliantNoOpService',
+        '-H:AdditionalSecurityProviders=com.oracle.svm.test.services.SecurityServiceTest$NoOpProvider',
+        '-H:AdditionalSecurityServiceTypes=com.oracle.svm.test.services.SecurityServiceTest$JCACompliantNoOpService',
         '-cp', cp_entry_name
     ])
     if extra_build_args is not None:
