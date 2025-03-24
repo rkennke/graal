@@ -122,7 +122,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             Register rscratch1 = sc1.getRegister();
             Register rscratch2 = sc2.getRegister();
             Register objectRegister = asRegister(object);
-            Register loadRegister = asRegister(loadAddress);
+            AArch64Address loadAddr = loadAddress.toAddress();
             Register resultRegister = asRegister(result);
 
             Register thread = providers.getRegisters().getThreadRegister();
@@ -146,8 +146,16 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             masm.str(64, objectRegister, cArg0);
 
             // Store second argument
+            Register addressReg = rscratch2;
+            if (loadAddr.isBaseRegisterOnly()) {
+                // Can directly use the base register as the address
+                addressReg = loadAddr.getBase();
+            } else {
+                addressReg = rscratch2;
+                masm.loadAddress(addressReg, loadAddr);
+            }
             AArch64Address cArg1 = (AArch64Address) crb.asAddress(cc.getArgument(1));
-            masm.str(64, loadRegister, cArg1);
+            masm.str(64, addressReg, cArg1);
 
             // Make the call
             AArch64Call.directCall(crb, masm, callTarget, AArch64Call.isNearCall(callTarget) ? null : rscratch1, null);
