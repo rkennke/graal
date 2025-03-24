@@ -167,7 +167,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
 
     @Override
     public ValueNode addLoadBarrier(StructuredGraph graph, ValueNode readValue, AddressNode address, BarrierType barrierType, boolean narrow) {
-        if (readValue.stamp(NodeView.DEFAULT).isObjectStamp()) {
+        if (readValue.stamp(NodeView.DEFAULT).isObjectStamp() && barrierType != BarrierType.NONE) {
             return graph.unique(new ShenandoahLoadBarrierNode(readValue, address, barrierType, narrow));
         }
         return readValue;
