@@ -28,6 +28,8 @@ import static jdk.graal.compiler.nodes.NamedLocationIdentity.OFF_HEAP_LOCATION;
 
 import jdk.graal.compiler.core.common.type.AbstractObjectStamp;
 import jdk.graal.compiler.hotspot.replacements.HotSpotReplacementsUtil;
+import jdk.graal.compiler.nodeinfo.InputType;
+import jdk.graal.compiler.nodes.extended.ArrayRangeWrite;
 import jdk.graal.compiler.nodes.gc.BarrierSet;
 import org.graalvm.word.LocationIdentity;
 
@@ -89,8 +91,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
                 return BarrierType.READ;
             }
 
-            if (address instanceof AddressNode) {
-                AddressNode addr = (AddressNode) address;
+            if (address instanceof AddressNode addr) {
                 if (addr.getBase().stamp(NodeView.DEFAULT).isObjectStamp()) {
                     // A read of an Object from an Object requires a barrier
                     return BarrierType.READ;
@@ -101,8 +102,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
         }
 
         boolean mustBeObject = false;
-        if (location instanceof FieldLocationIdentity) {
-            FieldLocationIdentity fieldLocationIdentity = (FieldLocationIdentity) location;
+        if (location instanceof FieldLocationIdentity fieldLocationIdentity) {
             mustBeObject = fieldLocationIdentity.getField().getJavaKind() == JavaKind.Object;
         }
         assert !mustBeObject : address;
@@ -111,6 +111,9 @@ public class ShenandoahBarrierSet implements BarrierSet {
 
     @Override
     public BarrierType writeBarrierType(RawStoreNode store) {
+        if (store.object().isNullConstant()) {
+            return BarrierType.NONE;
+        }
         return store.needsBarrier() ? readWriteBarrier(store.object(), store.value()) : BarrierType.NONE;
     }
 
@@ -137,13 +140,12 @@ public class ShenandoahBarrierSet implements BarrierSet {
 
     @Override
     public BarrierType readWriteBarrier(ValueNode object, ValueNode value) {
-        if (value.stamp(NodeView.DEFAULT).isObjectStamp()) {
+        if (value.getStackKind() == JavaKind.Object && object.getStackKind() == JavaKind.Object) {
             ResolvedJavaType type = StampTool.typeOrNull(object);
             if (type != null && type.isArray()) {
                 return BarrierType.ARRAY;
             } else if (type == null || type.isAssignableFrom(objectArrayType)) {
-                // Treat as an array
-                return BarrierType.ARRAY;
+                return BarrierType.UNKNOWN;
             } else {
                 return BarrierType.FIELD;
             }
@@ -163,14 +165,100 @@ public class ShenandoahBarrierSet implements BarrierSet {
 
     @Override
     public void addBarriers(FixedAccessNode n) {
+        switch (n) {
+            case ReadNode readNode -> addReadNodeBarriers(readNode);
+            case WriteNode write -> addWriteBarriers(write, write.value(), null, true);
+            case LoweredAtomicReadAndWriteNode atomic -> addWriteBarriers(atomic, atomic.getNewValue(), null, true);
+            case AbstractCompareAndSwapNode cmpSwap ->
+                    addWriteBarriers(cmpSwap, cmpSwap.getNewValue(), cmpSwap.getExpectedValue(), false);
+            case ArrayRangeWrite arrayRangeWrite -> addArrayRangeBarriers(arrayRangeWrite);
+            case null, default ->
+                    GraalError.guarantee(n.getBarrierType() == BarrierType.NONE, "missed a node that requires a GC barrier: %s", n.getClass());
+        }
+    }
+
+    private void addWriteBarriers(FixedAccessNode node, ValueNode writtenValue, ValueNode expectedValue, boolean doLoad) {
+        BarrierType barrierType = node.getBarrierType();
+        switch (barrierType) {
+            case NONE:
+                // nothing to do
+                break;
+            case FIELD:
+            case ARRAY:
+            case UNKNOWN:
+            case POST_INIT_WRITE:
+            case AS_NO_KEEPALIVE_WRITE:
+                if (isObjectValue(writtenValue)) {
+                    StructuredGraph graph = node.graph();
+                    boolean init = node.getLocationIdentity().isInit();
+                    if (!init && barrierType != BarrierType.AS_NO_KEEPALIVE_WRITE) {
+                        // The pre barrier does nothing if the value being read is null, so it can
+                        // be explicitly skipped when this is an initializing store.
+                        // No keep-alive means no need for the pre-barrier.
+                        addShenandoahPreWriteBarrier(node, node.getAddress(), expectedValue, doLoad, graph);
+                    }
+                }
+                break;
+            default:
+                throw new GraalError("unexpected barrier type: " + barrierType);
+        }
     }
 
     @Override
     public ValueNode addLoadBarrier(StructuredGraph graph, ValueNode readValue, AddressNode address, BarrierType barrierType, boolean narrow) {
-        if (readValue.stamp(NodeView.DEFAULT).isObjectStamp() && barrierType != BarrierType.NONE) {
-            return graph.unique(new ShenandoahLoadBarrierNode(readValue, address, barrierType, narrow));
+        if (false && readValue.stamp(NodeView.DEFAULT).isObjectStamp() && barrierType != BarrierType.NONE) {
+            System.out.println("New ShenandoahLoadBarrierNode");
+            return graph.add(new ShenandoahLoadBarrierNode(readValue, address, barrierType, narrow));
         }
         return readValue;
+    }
+
+    private void addReadNodeBarriers(ReadNode node) {
+        BarrierType barrierType = node.getBarrierType();
+        StructuredGraph graph = node.graph();
+        if (barrierType == BarrierType.REFERENCE_GET) {
+            ShenandoahReferentFieldReadBarrierNode barrier = graph.add(new ShenandoahReferentFieldReadBarrierNode(node.getAddress(), maybeUncompressReference(node)));
+            graph.addAfterFixed(node, barrier);
+        } else if (barrierType == BarrierType.WEAK_REFERS_TO || barrierType == BarrierType.PHANTOM_REFERS_TO) {
+            // No barrier node required
+        } else if (barrierType == BarrierType.READ) {
+            ValueNode value = maybeUncompressReference(node);
+            ShenandoahLoadBarrierNode lrb = graph.add(new ShenandoahLoadBarrierNode(value, node.getAddress(), barrierType, false));
+            ValueNode compValue = maybeCompressReference(lrb);
+            ValueNode newUsage = node == value ? lrb : value;
+            node.replaceAtUsages(compValue, InputType.Value, usage -> usage != newUsage);
+        } else {
+            GraalError.guarantee(node.getBarrierType() == BarrierType.NONE, "invalid barrier on %s %s", node, node.getBarrierType());
+        }
+    }
+
+    protected ValueNode maybeUncompressReference(ValueNode value) {
+        return value;
+    }
+    protected ValueNode maybeCompressReference(ValueNode value) {
+        return value;
+    }
+
+    private void addShenandoahPreWriteBarrier(FixedAccessNode node, AddressNode address, ValueNode value, boolean doLoad, StructuredGraph graph) {
+        ShenandoahPreWriteBarrierNode preBarrier = graph.add(new ShenandoahPreWriteBarrierNode(address, maybeUncompressReference(value), doLoad));
+        GraalError.guarantee(!node.getUsedAsNullCheck(), "trapping null checks are inserted after write barrier insertion: ", node);
+        node.setStateBefore(null);
+        graph.addBeforeFixed(node, preBarrier);
+    }
+
+    private void addArrayRangeBarriers(ArrayRangeWrite write) {
+        if (write.writesObjectArray()) {
+            StructuredGraph graph = write.asNode().graph();
+            if (!write.isInitialization()) {
+                // The pre barrier does nothing if the value being read is null, so it can
+                // be explicitly skipped when this is an initializing store.
+                ShenandoahArrayRangePreWriteBarrierNode arrayRangePreWriteBarrier = graph.add(new ShenandoahArrayRangePreWriteBarrierNode(write.getAddress(), write.getLength(), write.getElementStride()));
+                graph.addBeforeFixed(write.preBarrierInsertionPosition(), arrayRangePreWriteBarrier);
+            }
+        }
+    }
+    private static boolean isObjectValue(ValueNode value) {
+        return value.stamp(NodeView.DEFAULT) instanceof AbstractObjectStamp;
     }
 
     @Override
@@ -181,8 +269,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
     @Override
     public void verifyBarriers(StructuredGraph graph) {
         for (Node node : graph.getNodes()) {
-            if (node instanceof WriteNode) {
-                WriteNode write = (WriteNode) node;
+            if (node instanceof WriteNode write) {
                 Stamp stamp = write.getAccessStamp(NodeView.DEFAULT);
                 if (!stamp.isObjectStamp()) {
                     GraalError.guarantee(write.getBarrierType() == BarrierType.NONE, "no barriers for primitive writes: %s", write);
@@ -210,8 +297,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
                 } else {
                     GraalError.guarantee(read.getBarrierType() == BarrierType.READ, "missing barriers for heap read: %s", read);
                 }
-            } else if (node instanceof AddressableMemoryAccess) {
-                AddressableMemoryAccess access = (AddressableMemoryAccess) node;
+            } else if (node instanceof AddressableMemoryAccess access) {
                 if (access.getBarrierType() != BarrierType.NONE) {
                     throw new GraalError("Unexpected memory access with barrier : " + node);
                 }
@@ -220,8 +306,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
     }
 
     protected BarrierType barrierForLocation(BarrierType currentBarrier, LocationIdentity location, JavaKind storageKind) {
-        if (location instanceof FieldLocationIdentity) {
-            FieldLocationIdentity fieldLocationIdentity = (FieldLocationIdentity) location;
+        if (location instanceof FieldLocationIdentity fieldLocationIdentity) {
             BarrierType barrierType = fieldReadBarrierType(fieldLocationIdentity.getField(), storageKind);
             if (barrierType != currentBarrier && barrierType == BarrierType.REFERENCE_GET) {
                 if (currentBarrier == BarrierType.WEAK_REFERS_TO || currentBarrier == BarrierType.PHANTOM_REFERS_TO) {

@@ -456,7 +456,8 @@ public class GraalHotSpotVMConfig extends GraalHotSpotVMConfigAccess {
     public final int g1CardTableBaseOffset = getConstant("G1ThreadLocalData::card_table_base_offset", Integer.class, -1, g1LowLatencyPostWriteBarrierSupport);
 
     public final int shenandoahGCStateOffset = getConstant("ShenandoahThreadLocalData::gc_state_offset", Integer.class);
-
+    public final int shenandoahSATBIndexOffset = getConstant("ShenandoahThreadLocalData::satb_mark_queue_index_offset", Integer.class);
+    public final int shenandoahSATBBufferOffset = getConstant("ShenandoahThreadLocalData::satb_mark_queue_buffer_offset", Integer.class);
     public final int klassOffset = getFieldValue("java_lang_Class::_klass_offset", Integer.class, "int");
     public final int arrayKlassOffset = getFieldValue("java_lang_Class::_array_klass_offset", Integer.class, "int");
 
@@ -633,6 +634,7 @@ public class GraalHotSpotVMConfig extends GraalHotSpotVMConfigAccess {
     public final long shenandoahLoadBarrierWeakNarrow = getAddress("ShenandoahRuntime::load_reference_barrier_weak_narrow");
     public final long shenandoahLoadBarrierPhantom = getAddress("ShenandoahRuntime::load_reference_barrier_phantom");
     public final long shenandoahLoadBarrierPhantomNarrow = getAddress("ShenandoahRuntime::load_reference_barrier_phantom_narrow");
+    public final long shenandoahPreBarrier = getAddress("ShenandoahRuntime::pre_barrier");
 
     // aarch64 specific nmethod entry barrier support
     // @formatter:off

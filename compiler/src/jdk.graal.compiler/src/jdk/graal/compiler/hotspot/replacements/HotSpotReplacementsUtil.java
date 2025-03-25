@@ -722,6 +722,16 @@ public class HotSpotReplacementsUtil {
         return config.shenandoahGCStateOffset;
     }
 
+    @Fold
+    public static int shenandoahSATBIndexOffset(@InjectedParameter GraalHotSpotVMConfig config) {
+        return config.shenandoahSATBIndexOffset;
+    }
+
+    @Fold
+    public static int shenandoahSATBBufferOffset(@InjectedParameter GraalHotSpotVMConfig config) {
+        return config.shenandoahSATBBufferOffset;
+    }
+
     public static final LocationIdentity KLASS_SUPER_CHECK_OFFSET_LOCATION = NamedLocationIdentity.immutable("Klass::_super_check_offset");
 
     @Fold

@@ -42,6 +42,7 @@ import jdk.graal.compiler.hotspot.meta.HotSpotProviders;
 import jdk.graal.compiler.lir.LIRFrameState;
 import jdk.graal.compiler.lir.Variable;
 import jdk.graal.compiler.lir.aarch64.AArch64AddressValue;
+import jdk.graal.compiler.lir.aarch64.g1.AArch64G1PreWriteBarrierOp;
 import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
 import jdk.graal.compiler.lir.gen.LIRGeneratorTool;
 import jdk.graal.compiler.lir.gen.ShenandoahBarrierSetLIRGeneratorTool;
@@ -91,5 +92,20 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator  implements Shenando
         tool.getResult().getFrameMapBuilder().callsMethod(callTarget.getOutgoingCallingConvention());
         tool.append(new AArch64HotSpotShenandoahReadBarrierOp(config, providers, result, object, loadAddress, callTarget, strength));
         return result;
+    }
+
+    @Override
+    public void emitPreWriteBarrier(LIRGeneratorTool lirTool, Value address, AllocatableValue expectedObject, boolean nonNull) {
+        AllocatableValue temp = lirTool.newVariable(LIRKind.value(AArch64Kind.QWORD));
+        // If the assembly must load the value then it's needs a temporary to store it
+        AllocatableValue temp2 = expectedObject.equals(Value.ILLEGAL) ? lirTool.newVariable(LIRKind.value(AArch64Kind.QWORD)) : Value.ILLEGAL;
+
+        // Load the address into a register
+        AllocatableValue addressValue = lirTool.newVariable(address.getValueKind());
+        lirTool.emitMove(addressValue, address);
+
+        ForeignCallLinkage callTarget = lirTool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_PRE_BARRIER);
+        lirTool.getResult().getFrameMapBuilder().callsMethod(callTarget.getOutgoingCallingConvention());
+        lirTool.append(new AArch64ShenandoahPreWriteBarrierOp(config, providers, addressValue, expectedObject, temp, temp2, callTarget, nonNull));
     }
 }

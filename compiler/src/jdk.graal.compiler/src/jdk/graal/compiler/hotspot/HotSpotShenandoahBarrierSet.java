@@ -24,6 +24,11 @@
  */
 package jdk.graal.compiler.hotspot;
 
+import jdk.graal.compiler.core.common.CompressEncoding;
+import jdk.graal.compiler.core.common.type.ObjectStamp;
+import jdk.graal.compiler.hotspot.nodes.HotSpotCompressionNode;
+import jdk.graal.compiler.nodes.NodeView;
+import jdk.graal.compiler.nodes.type.NarrowOopStamp;
 import org.graalvm.word.LocationIdentity;
 
 import jdk.graal.compiler.core.common.memory.BarrierType;
@@ -40,8 +45,11 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * Specialization of {@link ShenandoahBarrierSet} that adds support for read barriers on handle locations.
  */
 public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
-    public HotSpotShenandoahBarrierSet(ResolvedJavaType objectArrayType, ResolvedJavaField referentField) {
+    private CompressEncoding oopEncoding;
+
+    public HotSpotShenandoahBarrierSet(ResolvedJavaType objectArrayType, ResolvedJavaField referentField, CompressEncoding oopEncoding) {
         super(objectArrayType, referentField);
+        this.oopEncoding = oopEncoding;
     }
 
     @Override
@@ -67,5 +75,21 @@ public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
             return BarrierType.FIELD;
         }
         return BarrierType.NONE;
+    }
+
+    @Override
+    protected ValueNode maybeUncompressReference(ValueNode value) {
+        if (value != null && (value.stamp(NodeView.DEFAULT) instanceof NarrowOopStamp)) {
+            return HotSpotCompressionNode.uncompress(value.graph(), value, oopEncoding);
+        }
+        return value;
+    }
+
+    @Override
+    protected ValueNode maybeCompressReference(ValueNode value) {
+        if (value != null && (value.stamp(NodeView.DEFAULT) instanceof ObjectStamp)) {
+            return HotSpotCompressionNode.compress(value.graph(), value, oopEncoding);
+        }
+        return value;
     }
 }

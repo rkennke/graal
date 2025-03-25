@@ -14,12 +14,16 @@ import jdk.graal.compiler.nodes.spi.CanonicalizerTool;
 import jdk.graal.compiler.nodes.spi.LIRLowerable;
 import jdk.graal.compiler.nodes.spi.NodeLIRBuilderTool;
 
-import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_1;
+import static jdk.graal.compiler.nodeinfo.NodeCycles.CYCLES_64;
 import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_16;
+import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_64;
 
-@NodeInfo(size = SIZE_16)
-public final class ShenandoahLoadBarrierNode extends UnaryNode implements LIRLowerable {
+@NodeInfo(cycles = CYCLES_64, size = SIZE_64)
+public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLowerable {
     public static final NodeClass<ShenandoahLoadBarrierNode> TYPE = NodeClass.create(ShenandoahLoadBarrierNode.class);
+
+    @Input
+    private ValueNode value;
 
     public static enum ReferenceStrength {
         STRONG, WEAK, PHANTOM;
@@ -41,15 +45,12 @@ public final class ShenandoahLoadBarrierNode extends UnaryNode implements LIRLow
     }
 
     public ShenandoahLoadBarrierNode(ValueNode value, AddressNode address, BarrierType barrierType, boolean narrow) {
-        super(TYPE, value.stamp(NodeView.DEFAULT), value);
+        super(TYPE, value.stamp(NodeView.DEFAULT));
+        this.value = value;
         this.address = address;
         this.strength = getReferenceStrength(barrierType);
         this.narrow = narrow;
-    }
-
-    @Override
-    public Node canonical(CanonicalizerTool tool, ValueNode forValue) {
-        return this;
+        System.out.println("New ShenandoahLoadBarrierNode");
     }
 
     @Override
