@@ -131,11 +131,19 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             masm.mov(64, resultRegister, objectRegister);
 
             // Check for heap stability
-            Label heapIsStable = new Label();
+            Label done = new Label();
             int gcStateOffset = HotSpotReplacementsUtil.shenandoahGCStateOffset(config);
             AArch64Address gcState = masm.makeAddress(8, thread, gcStateOffset);
             masm.ldr(8, rscratch2, gcState);
-            masm.tbz(rscratch2, GCStateBitPos.HAS_FORWARDED_BITPOS.getValue(), heapIsStable);
+            masm.tbz(rscratch2, GCStateBitPos.HAS_FORWARDED_BITPOS.getValue(), done);
+
+            if (strength == ShenandoahLoadBarrierNode.ReferenceStrength.STRONG) {
+                // Check for object in collection set.
+                masm.mov(rscratch2, HotSpotReplacementsUtil.shenandoahGCCSetFastTestAddr(config));
+                masm.lsr(64, rscratch1, objectRegister, HotSpotReplacementsUtil.shenandoahGCRegionSizeBytesShift(config));
+                masm.ldr(8, rscratch2, AArch64Address.createRegisterOffsetAddress(8, rscratch2, rscratch1, false));
+                masm.tbz(rscratch2, 0, done);
+            }
 
             // Make the call to LRB barrier
             CallingConvention cc = callTarget.getOutgoingCallingConvention();
@@ -164,7 +172,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             AArch64Address cRet = (AArch64Address) crb.asAddress(cc.getReturn());
             masm.ldr(64, resultRegister, cRet);
 
-            masm.bind(heapIsStable);
+            masm.bind(done);
         }
     }
 }
