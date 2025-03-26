@@ -43,8 +43,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import jdk.graal.compiler.hotspot.replacements.shenandoah.HotSpotShenandoahBarrierSnippets;
-import jdk.graal.compiler.nodes.gc.shenandoah.ShenandoahArrayRangePreWriteBarrierNode;
 import org.graalvm.word.LocationIdentity;
 
 import jdk.graal.compiler.core.common.CompressEncoding;
@@ -280,7 +278,6 @@ public abstract class DefaultHotSpotLoweringProvider extends DefaultJavaLowering
     protected MonitorSnippets.Templates monitorSnippets;
     protected HotSpotSerialWriteBarrierSnippets.Templates serialWriteBarrierSnippets;
     protected HotSpotG1WriteBarrierSnippets.Templates g1WriteBarrierSnippets;
-    protected HotSpotShenandoahBarrierSnippets.Templates shenandoahBarrierSnippets;
     protected LoadExceptionObjectSnippets.Templates exceptionObjectSnippets;
     protected AssertionSnippets.Templates assertionSnippets;
     protected LogSnippets.Templates logSnippets;
@@ -333,7 +330,6 @@ public abstract class DefaultHotSpotLoweringProvider extends DefaultJavaLowering
         monitorSnippets = new MonitorSnippets.Templates(options, runtime, providers, config);
         g1WriteBarrierSnippets = new HotSpotG1WriteBarrierSnippets.Templates(options, runtime, providers, config);
         serialWriteBarrierSnippets = new HotSpotSerialWriteBarrierSnippets.Templates(options, runtime, providers);
-        shenandoahBarrierSnippets = new HotSpotShenandoahBarrierSnippets.Templates(options, runtime, providers, config);
         exceptionObjectSnippets = new LoadExceptionObjectSnippets.Templates(options, providers);
         assertionSnippets = new AssertionSnippets.Templates(options, providers);
         logSnippets = new LogSnippets.Templates(options, providers);
@@ -546,8 +542,6 @@ public abstract class DefaultHotSpotLoweringProvider extends DefaultJavaLowering
             g1WriteBarrierSnippets.lower((G1ArrayRangePreWriteBarrierNode) n, tool);
         } else if (n instanceof G1ArrayRangePostWriteBarrierNode) {
             g1WriteBarrierSnippets.lower((G1ArrayRangePostWriteBarrierNode) n, tool);
-        } else if (n instanceof ShenandoahArrayRangePreWriteBarrierNode) {
-            shenandoahBarrierSnippets.lower((ShenandoahArrayRangePreWriteBarrierNode) n, tool);
         } else if (n instanceof NewMultiArrayNode) {
             if (graph.getGuardsStage().areFrameStatesAtDeopts()) {
                 getAllocationSnippets().lower((NewMultiArrayNode) n, tool);

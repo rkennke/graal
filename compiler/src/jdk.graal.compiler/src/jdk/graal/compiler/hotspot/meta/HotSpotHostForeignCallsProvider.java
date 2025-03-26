@@ -83,7 +83,6 @@ import static jdk.graal.compiler.hotspot.replacements.Log.LOG_PRIMITIVE;
 import static jdk.graal.compiler.hotspot.replacements.Log.LOG_PRINTF;
 import static jdk.graal.compiler.hotspot.replacements.MonitorSnippets.MONITORENTER;
 import static jdk.graal.compiler.hotspot.replacements.MonitorSnippets.MONITOREXIT;
-import static jdk.graal.compiler.hotspot.replacements.shenandoah.HotSpotShenandoahBarrierSnippets.SHENANDOAHWBPRECALL;
 import static jdk.graal.compiler.hotspot.stubs.ExceptionHandlerStub.EXCEPTION_HANDLER_FOR_PC;
 import static jdk.graal.compiler.hotspot.stubs.LookUpSecondarySupersTableStub.LOOKUP_SECONDARY_SUPERS_TABLE_SLOW_PATH;
 import static jdk.graal.compiler.hotspot.stubs.StubUtil.VM_MESSAGE_C;
@@ -604,7 +603,6 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
         linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER_PHANTOM, c.shenandoahLoadBarrierPhantom, DONT_PREPEND_THREAD);
         linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER_PHANTOM_NARROW, c.shenandoahLoadBarrierPhantomNarrow, DONT_PREPEND_THREAD);
         linkStackOnlyForeignCall(options, providers, SHENANDOAH_PRE_BARRIER, c.shenandoahPreBarrier, PREPEND_THREAD);
-        linkForeignCall(options, providers, SHENANDOAHWBPRECALL, c.writeBarrierPreAddress, PREPEND_THREAD);
 
         linkForeignCall(options, providers, LOG_PRINTF, c.logPrintfAddress, PREPEND_THREAD);
         linkForeignCall(options, providers, LOG_OBJECT, c.logObjectAddress, PREPEND_THREAD);

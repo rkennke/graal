@@ -171,7 +171,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
             case LoweredAtomicReadAndWriteNode atomic -> addWriteBarriers(atomic, atomic.getNewValue(), null, true);
             case AbstractCompareAndSwapNode cmpSwap ->
                     addWriteBarriers(cmpSwap, cmpSwap.getNewValue(), cmpSwap.getExpectedValue(), false);
-            case ArrayRangeWrite arrayRangeWrite -> addArrayRangeBarriers(arrayRangeWrite);
+            case ArrayRangeWrite ignored -> GraalError.unimplemented("ArrayRangeWrite is not used");
             case null, default ->
                     GraalError.guarantee(n.getBarrierType() == BarrierType.NONE, "missed a node that requires a GC barrier: %s", n.getClass());
         }
@@ -246,17 +246,6 @@ public class ShenandoahBarrierSet implements BarrierSet {
         graph.addBeforeFixed(node, preBarrier);
     }
 
-    private void addArrayRangeBarriers(ArrayRangeWrite write) {
-        if (write.writesObjectArray()) {
-            StructuredGraph graph = write.asNode().graph();
-            if (!write.isInitialization()) {
-                // The pre barrier does nothing if the value being read is null, so it can
-                // be explicitly skipped when this is an initializing store.
-                ShenandoahArrayRangePreWriteBarrierNode arrayRangePreWriteBarrier = graph.add(new ShenandoahArrayRangePreWriteBarrierNode(write.getAddress(), write.getLength(), write.getElementStride()));
-                graph.addBeforeFixed(write.preBarrierInsertionPosition(), arrayRangePreWriteBarrier);
-            }
-        }
-    }
     private static boolean isObjectValue(ValueNode value) {
         return value.stamp(NodeView.DEFAULT) instanceof AbstractObjectStamp;
     }
