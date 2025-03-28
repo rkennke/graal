@@ -1,5 +1,6 @@
 /*
  * Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
+ * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,20 +28,14 @@ package jdk.graal.compiler.hotspot.aarch64.shenandoah;
 import jdk.graal.compiler.asm.Label;
 import jdk.graal.compiler.asm.aarch64.AArch64Address;
 import jdk.graal.compiler.asm.aarch64.AArch64MacroAssembler;
-import jdk.graal.compiler.core.common.CompressEncoding;
-import jdk.graal.compiler.core.common.memory.MemoryOrderMode;
 import jdk.graal.compiler.core.common.spi.ForeignCallLinkage;
-import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.hotspot.GraalHotSpotVMConfig;
 import jdk.graal.compiler.hotspot.meta.HotSpotProviders;
 import jdk.graal.compiler.hotspot.replacements.HotSpotReplacementsUtil;
-import jdk.graal.compiler.lir.LIRFrameState;
 import jdk.graal.compiler.lir.LIRInstructionClass;
-import jdk.graal.compiler.lir.Variable;
 import jdk.graal.compiler.lir.aarch64.AArch64AddressValue;
 import jdk.graal.compiler.lir.aarch64.AArch64Call;
 import jdk.graal.compiler.lir.aarch64.AArch64LIRInstruction;
-import jdk.graal.compiler.lir.aarch64.AArch64Move;
 import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
 import jdk.graal.compiler.nodes.gc.shenandoah.ShenandoahLoadBarrierNode;
 
@@ -48,7 +43,6 @@ import jdk.vm.ci.code.CallingConvention;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.meta.AllocatableValue;
 
-import static jdk.graal.compiler.asm.aarch64.AArch64Address.AddressingMode.IMMEDIATE_SIGNED_UNSCALED;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
@@ -95,7 +89,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
 
     @Def({REG}) protected AllocatableValue result;
     @Use({REG}) protected AllocatableValue object;
-    @Use({COMPOSITE}) protected AArch64AddressValue loadAddress;
+    @Alive({COMPOSITE}) protected AArch64AddressValue loadAddress;
 
     protected final ForeignCallLinkage callTarget;
 
@@ -118,7 +112,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
     @Override
     public void emitCode(CompilationResultBuilder crb, AArch64MacroAssembler masm) {
         try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister(); AArch64MacroAssembler.ScratchRegister sc2 = masm.getScratchRegister()) {
-            System.out.println("Emitting Shenandoah load reference barrier");
+            // System.out.println("Emitting Shenandoah load reference barrier");
             Register rscratch1 = sc1.getRegister();
             Register rscratch2 = sc2.getRegister();
             Register objectRegister = asRegister(object);
@@ -130,15 +124,23 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             // Move object to result, in case the heap is stable an no barrier needs to be called.
             masm.mov(64, resultRegister, objectRegister);
 
-            // Check for heap stability
+            // Check for object being null.
+            // TODO: is this needed?
             Label done = new Label();
+            masm.cbz(64, resultRegister, done);
+
+            // Check for heap stability
+            Label lrb = new Label();
             int gcStateOffset = HotSpotReplacementsUtil.shenandoahGCStateOffset(config);
             AArch64Address gcState = masm.makeAddress(8, thread, gcStateOffset);
             masm.ldr(8, rscratch2, gcState);
+            masm.tbnz(rscratch2, GCStateBitPos.WEAK_ROOTS_BITPOS.getValue(), lrb);
             masm.tbz(rscratch2, GCStateBitPos.HAS_FORWARDED_BITPOS.getValue(), done);
+            masm.bind(lrb);
 
             if (strength == ShenandoahLoadBarrierNode.ReferenceStrength.STRONG) {
                 // Check for object in collection set.
+                // TODO: handle this in slow-path-block.
                 masm.mov(rscratch2, HotSpotReplacementsUtil.shenandoahGCCSetFastTestAddr(config));
                 masm.lsr(64, rscratch1, objectRegister, HotSpotReplacementsUtil.shenandoahGCRegionSizeBytesShift(config));
                 masm.ldr(8, rscratch2, AArch64Address.createRegisterOffsetAddress(8, rscratch2, rscratch1, false));
@@ -146,6 +148,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             }
 
             // Make the call to LRB barrier
+            // TODO: handle this in another slow-path-block.
             CallingConvention cc = callTarget.getOutgoingCallingConvention();
             assert cc.getArgumentCount() == 2 : "Expecting callTarget to have only 2 parameters. It has " + cc.getArgumentCount();
 
@@ -154,7 +157,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             masm.str(64, objectRegister, cArg0);
 
             // Store second argument
-            Register addressReg = rscratch2;
+            Register addressReg;
             if (loadAddr.isBaseRegisterOnly()) {
                 // Can directly use the base register as the address
                 addressReg = loadAddr.getBase();
@@ -168,7 +171,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             // Make the call
             AArch64Call.directCall(crb, masm, callTarget, AArch64Call.isNearCall(callTarget) ? null : rscratch1, null);
 
-            // Retrieve result and move to same register that our input was in
+            // Retrieve result and move to the result register.
             AArch64Address cRet = (AArch64Address) crb.asAddress(cc.getReturn());
             masm.ldr(64, resultRegister, cRet);
 

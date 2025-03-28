@@ -231,24 +231,24 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
      */
 
     // oopDesc* ShenandoahRuntime::load_reference_barrier_strong(oopDesc* o, oop* p);
-    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, NO_LOCATIONS,
+    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
             "ShenandoahRuntime::load_reference_barrier_strong", Object.class, Object.class, Word.class);
     // oopDesc* ShenandoahRuntime::load_reference_barrier_strong_narrow(oopDesc* o, narrowOop* p);
-    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, NO_LOCATIONS,
+    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
             "ShenandoahRuntime::load_reference_barrier_strong_narrow", Object.class, Object.class, Word.class);
 
     // oopDesc* ShenandoahRuntime::load_reference_barrier_weak(oopDesc* o, oop* p);
-    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_WEAK = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, NO_LOCATIONS,
+    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_WEAK = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
             "ShenandoahRuntime::load_reference_barrier_weak", Object.class, Object.class, Word.class);
     // oopDesc* ShenandoahRuntime::load_reference_barrier_weak_narrow(oopDesc* o, narrowOop* p);
-    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_WEAK_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, NO_LOCATIONS,
+    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_WEAK_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
             "ShenandoahRuntime::load_reference_barrier_weak_narrow", Object.class, Object.class, Word.class);
 
     // oopDesc* ShenandoahRuntime::load_reference_barrier_phantom(oopDesc* o, oop* p);
-    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_PHANTOM = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, NO_LOCATIONS,
+    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_PHANTOM = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
             "ShenandoahRuntime::load_reference_barrier_phantom", Object.class, Object.class, Word.class);
     // oopDesc* ShenandoahRuntime::load_reference_barrier_phantom_narrow(oopDesc* o, narrowOop* p);
-    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_PHANTOM_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, NO_LOCATIONS,
+    public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_PHANTOM_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
             "ShenandoahRuntime::load_reference_barrier_phantom_narrow", Object.class, Object.class, Word.class);
 
     // void ShenandoahRuntime::pre_barrier(JavaThread*, oopDesc*)
@@ -594,15 +594,13 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
         linkStackOnlyForeignCall(options, providers, G1WBPRECALL_STACK_ONLY, c.writeBarrierPreAddress, PREPEND_THREAD);
         linkStackOnlyForeignCall(options, providers, G1WBPOSTCALL_STACK_ONLY, c.writeBarrierPostAddress, PREPEND_THREAD);
 
-        GraalError.guarantee(c.shenandoahLoadBarrierStrong != 0, "barrier entry must be found");
-        GraalError.guarantee(c.shenandoahLoadBarrierStrongNarrow != 0, "narrow barrier entry must be found");
-        linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER, c.shenandoahLoadBarrierStrong, DONT_PREPEND_THREAD);
-        linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER_NARROW, c.shenandoahLoadBarrierStrongNarrow, DONT_PREPEND_THREAD);
-        linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER_WEAK, c.shenandoahLoadBarrierWeak, DONT_PREPEND_THREAD);
-        linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER_WEAK_NARROW, c.shenandoahLoadBarrierWeakNarrow, DONT_PREPEND_THREAD);
-        linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER_PHANTOM, c.shenandoahLoadBarrierPhantom, DONT_PREPEND_THREAD);
-        linkStackOnlyForeignCall(options, providers, SHENANDOAH_LOAD_BARRIER_PHANTOM_NARROW, c.shenandoahLoadBarrierPhantomNarrow, DONT_PREPEND_THREAD);
-        linkStackOnlyForeignCall(options, providers, SHENANDOAH_PRE_BARRIER, c.shenandoahPreBarrier, PREPEND_THREAD);
+        linkStackOnlyForeignCall(c.gc == Shenandoah, options, providers, SHENANDOAH_LOAD_BARRIER, c.shenandoahLoadBarrierStrong, DONT_PREPEND_THREAD);
+        linkStackOnlyForeignCall(c.gc == Shenandoah, options, providers, SHENANDOAH_LOAD_BARRIER_NARROW, c.shenandoahLoadBarrierStrongNarrow, DONT_PREPEND_THREAD);
+        linkStackOnlyForeignCall(c.gc == Shenandoah, options, providers, SHENANDOAH_LOAD_BARRIER_WEAK, c.shenandoahLoadBarrierWeak, DONT_PREPEND_THREAD);
+        linkStackOnlyForeignCall(c.gc == Shenandoah, options, providers, SHENANDOAH_LOAD_BARRIER_WEAK_NARROW, c.shenandoahLoadBarrierWeakNarrow, DONT_PREPEND_THREAD);
+        linkStackOnlyForeignCall(c.gc == Shenandoah, options, providers, SHENANDOAH_LOAD_BARRIER_PHANTOM, c.shenandoahLoadBarrierPhantom, DONT_PREPEND_THREAD);
+        linkStackOnlyForeignCall(c.gc == Shenandoah, options, providers, SHENANDOAH_LOAD_BARRIER_PHANTOM_NARROW, c.shenandoahLoadBarrierPhantomNarrow, DONT_PREPEND_THREAD);
+        linkStackOnlyForeignCall(c.gc == Shenandoah, options, providers, SHENANDOAH_PRE_BARRIER, c.shenandoahPreBarrier, PREPEND_THREAD);
 
         linkForeignCall(options, providers, LOG_PRINTF, c.logPrintfAddress, PREPEND_THREAD);
         linkForeignCall(options, providers, LOG_OBJECT, c.logObjectAddress, PREPEND_THREAD);
