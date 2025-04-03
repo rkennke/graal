@@ -27,6 +27,7 @@ package jdk.graal.compiler.hotspot.aarch64.shenandoah;
 
 import jdk.graal.compiler.core.aarch64.AArch64LIRGenerator;
 import jdk.graal.compiler.core.aarch64.AArch64ReadBarrierSetLIRGenerator;
+import jdk.graal.compiler.core.common.CompressEncoding;
 import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.common.memory.BarrierType;
 import jdk.graal.compiler.core.common.memory.MemoryExtendKind;
@@ -58,7 +59,8 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements AArch64Re
     private final GraalHotSpotVMConfig config;
     private final HotSpotProviders providers;
 
-    private ForeignCallLinkage getReadBarrierStub(LIRGeneratorTool tool, ShenandoahLoadBarrierNode.ReferenceStrength strength, boolean narrow) {
+    private ForeignCallLinkage getReadBarrierStub(LIRGeneratorTool tool, ShenandoahLoadBarrierNode.ReferenceStrength strength) {
+        boolean narrow = config.useCompressedOops;
         return switch (strength) {
             case STRONG  -> narrow ? tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_NARROW) :
                     tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER);
@@ -70,16 +72,22 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements AArch64Re
     }
 
     @Override
-    public Variable emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadBarrierNode.ReferenceStrength strength, boolean narrow) {
+    public Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadBarrierNode.ReferenceStrength strength) {
+        boolean coops = obj.getValueKind().getPlatformKind() == AArch64Kind.DWORD;
+        if (coops) {
+            obj = tool.emitUncompress(obj, config.getOopEncoding(), false);
+        }
         PlatformKind platformKind = obj.getPlatformKind();
-        providers.getRegisters().getThreadRegister();
         LIRKind kind = LIRKind.reference(platformKind);
-        Variable result = tool.newVariable(tool.toRegisterKind(kind));
-        ForeignCallLinkage callTarget = getReadBarrierStub(tool, strength, narrow);
+        Value result = tool.newVariable(tool.toRegisterKind(kind));
+        ForeignCallLinkage callTarget = getReadBarrierStub(tool, strength);
         AllocatableValue object = tool.asAllocatable(obj);
         AArch64AddressValue loadAddress = ((AArch64LIRGenerator) tool).asAddressValue(address, 64);
         tool.getResult().getFrameMapBuilder().callsMethod(callTarget.getOutgoingCallingConvention());
-        tool.append(new AArch64HotSpotShenandoahReadBarrierOp(config, providers, result, object, loadAddress, callTarget, strength));
+        tool.append(new AArch64HotSpotShenandoahReadBarrierOp(config, providers, tool.asAllocatable(result), object, loadAddress, callTarget, strength));
+        if (coops) {
+            result = tool.emitCompress(result, config.getOopEncoding(), false);
+        }
         return result;
     }
 
@@ -108,25 +116,28 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements AArch64Re
     }
 
     @Override
-    public Variable emitBarrieredLoad(LIRGeneratorTool tool, LIRKind kind, Value address, LIRFrameState state, MemoryOrderMode memoryOrder, BarrierType barrierType) {
-        Variable load = tool.getArithmetic().emitLoad(kind, address, state, memoryOrder, MemoryExtendKind.DEFAULT);
-        return emitLoadReferenceBarrier(tool, load, address, getReferenceStrength(barrierType), false);
+    public Value emitBarrieredLoad(LIRGeneratorTool tool, LIRKind kind, Value address, LIRFrameState state, MemoryOrderMode memoryOrder, BarrierType barrierType) {
+        Value load = tool.getArithmetic().emitLoad(kind, address, state, memoryOrder, MemoryExtendKind.DEFAULT);
+        return emitLoadReferenceBarrier(tool, load, address, getReferenceStrength(barrierType));
     }
 
     @Override
     public Value emitAtomicReadAndWrite(LIRGeneratorTool tool, LIRKind readKind, Value address, Value newValue, BarrierType barrierType) {
         Value xchg = tool.emitAtomicReadAndWrite(readKind, address, newValue, barrierType);
-        //emitPreWriteBarrier(tool, address, tool.asAllocatable(xchg), false);
-        return emitLoadReferenceBarrier(tool, xchg, address, getReferenceStrength(barrierType), false);
+        return emitLoadReferenceBarrier(tool, xchg, address, getReferenceStrength(barrierType));
     }
 
     @Override
     public void emitCompareAndSwapOp(LIRGeneratorTool tool, boolean isLogic, Value address, MemoryOrderMode memoryOrder, AArch64Kind memKind, Variable result, AllocatableValue allocatableExpectedValue, AllocatableValue allocatableNewValue, BarrierType barrierType) {
         tool.append(new AArch64AtomicMove.CompareAndSwapOp(memKind, memoryOrder, isLogic, result, allocatableExpectedValue, allocatableNewValue, tool.asAllocatable(address)));
-        //emitPreWriteBarrier(tool, address, result, false);
         if (!isLogic) {
-            Variable lrb = emitLoadReferenceBarrier(tool, result, address, getReferenceStrength(barrierType), false);
-            tool.append(new AArch64Move.Move(AArch64Kind.QWORD, tool.asAllocatable(result), lrb));
+            boolean compressed = result.getValueKind().getPlatformKind() == AArch64Kind.DWORD;
+            Value lrb = emitLoadReferenceBarrier(tool, result, address, getReferenceStrength(barrierType));
+            if (compressed) {
+                tool.append(new AArch64Move.Move(AArch64Kind.DWORD, result, tool.asAllocatable(lrb)));
+            } else {
+                tool.append(new AArch64Move.Move(AArch64Kind.QWORD, result, tool.asAllocatable(lrb)));
+            }
         }
     }
 }

@@ -392,12 +392,12 @@ public class AArch64HotSpotZBarrierSetLIRGenerator implements AArch64ReadBarrier
     }
 
     @Override
-    public Variable emitBarrieredLoad(LIRGeneratorTool tool,
-                    LIRKind kind,
-                    Value address,
-                    LIRFrameState state,
-                    MemoryOrderMode memoryOrder,
-                    BarrierType barrierType) {
+    public Value emitBarrieredLoad(LIRGeneratorTool tool,
+                                   LIRKind kind,
+                                   Value address,
+                                   LIRFrameState state,
+                                   MemoryOrderMode memoryOrder,
+                                   BarrierType barrierType) {
         if (kind.getPlatformKind().getVectorLength() == 1) {
             GraalError.guarantee(kind.getPlatformKind() == AArch64Kind.QWORD, "ZGC only uses uncompressed oops: %s", kind);
 

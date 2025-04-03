@@ -56,6 +56,6 @@ public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLow
     @Override
     public void generate(NodeLIRBuilderTool gen) {
         ShenandoahBarrierSetLIRGeneratorTool tool = (ShenandoahBarrierSetLIRGeneratorTool) gen.getLIRGeneratorTool().getBarrierSet();
-        gen.setResult(this, tool.emitLoadReferenceBarrier(gen.getLIRGeneratorTool(), gen.operand(value), gen.operand(address), strength, narrow));
+        gen.setResult(this, tool.emitLoadReferenceBarrier(gen.getLIRGeneratorTool(), gen.operand(value), gen.operand(address), strength));
     }
 }
