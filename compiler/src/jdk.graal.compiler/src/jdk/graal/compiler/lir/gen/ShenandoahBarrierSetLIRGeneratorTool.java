@@ -29,8 +29,8 @@ import jdk.graal.compiler.nodes.gc.shenandoah.ShenandoahLoadBarrierNode;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
 
-public interface ShenandoahBarrierSetLIRGeneratorTool extends ReadBarrierSetLIRGeneratorTool {
-    Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadBarrierNode.ReferenceStrength strength);
+public interface ShenandoahBarrierSetLIRGeneratorTool extends BarrierSetLIRGeneratorTool {
+    Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadBarrierNode.ReferenceStrength strength, boolean narrow);
 
     void emitPreWriteBarrier(LIRGeneratorTool lirTool, Value address, AllocatableValue expectedObject, boolean nonNull);
 }

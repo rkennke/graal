@@ -122,8 +122,6 @@ public class MidTier extends BaseTier<MidTierContext> {
         }
 
         appendPhase(canonicalizer);
-
-        appendPhase(new WriteBarrierAdditionPhase());
     }
 
     @Override

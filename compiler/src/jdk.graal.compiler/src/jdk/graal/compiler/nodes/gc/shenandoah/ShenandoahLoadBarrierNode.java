@@ -5,7 +5,11 @@ import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.graph.NodeClass;
 import jdk.graal.compiler.lir.gen.ShenandoahBarrierSetLIRGeneratorTool;
+import jdk.graal.compiler.nodeinfo.InputType;
 import jdk.graal.compiler.nodeinfo.NodeInfo;
+import jdk.graal.compiler.nodeinfo.StructuralInput;
+import jdk.graal.compiler.nodes.FixedNode;
+import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.NodeView;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.calc.UnaryNode;
@@ -19,17 +23,17 @@ import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_16;
 import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_64;
 
 @NodeInfo(cycles = CYCLES_64, size = SIZE_64)
-public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLowerable {
+public final class ShenandoahLoadBarrierNode extends FixedWithNextNode implements LIRLowerable {
     public static final NodeClass<ShenandoahLoadBarrierNode> TYPE = NodeClass.create(ShenandoahLoadBarrierNode.class);
 
     @Input
     private ValueNode value;
 
-    public static enum ReferenceStrength {
+    public enum ReferenceStrength {
         STRONG, WEAK, PHANTOM;
     };
 
-    @Input
+    @Input(InputType.Association)
     private AddressNode address;
 
     private final ReferenceStrength strength;
@@ -37,10 +41,10 @@ public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLow
 
     private static ReferenceStrength getReferenceStrength(BarrierType barrierType) {
         return switch (barrierType) {
-            case READ, NONE -> ReferenceStrength.STRONG;
+            case READ, FIELD, ARRAY, NONE -> ReferenceStrength.STRONG;
             case REFERENCE_GET, WEAK_REFERS_TO -> ReferenceStrength.WEAK;
             case PHANTOM_REFERS_TO -> ReferenceStrength.PHANTOM;
-            case ARRAY, FIELD, UNKNOWN, POST_INIT_WRITE, AS_NO_KEEPALIVE_WRITE -> throw GraalError.shouldNotReachHere("Unexpected barrier type: " + barrierType);
+            case UNKNOWN, POST_INIT_WRITE, AS_NO_KEEPALIVE_WRITE -> throw GraalError.shouldNotReachHere("Unexpected barrier type: " + barrierType);
         };
     }
 
@@ -50,12 +54,12 @@ public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLow
         this.address = address;
         this.strength = getReferenceStrength(barrierType);
         this.narrow = narrow;
-        System.out.println("New ShenandoahLoadBarrierNode");
+        //System.out.println("New ShenandoahLoadBarrierNode");
     }
 
     @Override
     public void generate(NodeLIRBuilderTool gen) {
         ShenandoahBarrierSetLIRGeneratorTool tool = (ShenandoahBarrierSetLIRGeneratorTool) gen.getLIRGeneratorTool().getBarrierSet();
-        gen.setResult(this, tool.emitLoadReferenceBarrier(gen.getLIRGeneratorTool(), gen.operand(value), gen.operand(address), strength));
+        gen.setResult(this, tool.emitLoadReferenceBarrier(gen.getLIRGeneratorTool(), gen.operand(value), gen.operand(address), strength, narrow));
     }
 }

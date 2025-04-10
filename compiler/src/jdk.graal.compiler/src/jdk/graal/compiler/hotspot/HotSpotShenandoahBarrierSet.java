@@ -78,16 +78,16 @@ public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
     }
 
     @Override
-    protected ValueNode maybeUncompressReference(ValueNode value) {
-        if (value != null && (value.stamp(NodeView.DEFAULT) instanceof NarrowOopStamp)) {
+    protected ValueNode maybeUncompressReference(ValueNode value, boolean narrow) {
+        if (value != null && narrow) {
             return HotSpotCompressionNode.uncompress(value.graph(), value, oopEncoding);
         }
         return value;
     }
 
     @Override
-    protected ValueNode maybeCompressReference(ValueNode value) {
-        if (value != null && (value.stamp(NodeView.DEFAULT) instanceof ObjectStamp)) {
+    protected ValueNode maybeCompressReference(ValueNode value, boolean narrow) {
+        if (value != null && narrow) {
             return HotSpotCompressionNode.compress(value.graph(), value, oopEncoding);
         }
         return value;

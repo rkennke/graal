@@ -25,6 +25,7 @@
  */
 package jdk.graal.compiler.nodes.gc;
 
+import jdk.graal.compiler.nodes.memory.ReadNode;
 import jdk.graal.compiler.nodes.memory.address.AddressNode;
 import org.graalvm.word.LocationIdentity;
 
@@ -87,19 +88,5 @@ public interface BarrierSet {
      * @param graph the grraph to verify.
      */
     default void verifyBarriers(StructuredGraph graph) {
-    }
-
-    /**
-     * Adds a barrier after a load from memory. References will already have been
-     * uncompressed.
-     *
-     * @param graph
-     * @param readValue   the original read node (might be an uncompress node)
-     * @param barrierType
-     * @param narrow
-     * @return the barrier node, or the original node, if no barrier is needed
-     */
-    default ValueNode addLoadBarrier(StructuredGraph graph, ValueNode readValue, AddressNode address, BarrierType barrierType, boolean narrow) {
-        return readValue;
     }
 }

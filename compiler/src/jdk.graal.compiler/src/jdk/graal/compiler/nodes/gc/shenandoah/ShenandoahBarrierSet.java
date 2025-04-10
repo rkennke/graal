@@ -29,9 +29,10 @@ import static jdk.graal.compiler.nodes.NamedLocationIdentity.OFF_HEAP_LOCATION;
 import jdk.graal.compiler.core.common.type.AbstractObjectStamp;
 import jdk.graal.compiler.hotspot.replacements.HotSpotReplacementsUtil;
 import jdk.graal.compiler.nodeinfo.InputType;
+import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.extended.ArrayRangeWrite;
 import jdk.graal.compiler.nodes.gc.BarrierSet;
-import jdk.graal.compiler.nodes.memory.FloatingAccessNode;
+import jdk.graal.compiler.nodes.type.NarrowOopStamp;
 import org.graalvm.word.LocationIdentity;
 
 import jdk.graal.compiler.core.common.memory.BarrierType;
@@ -209,56 +210,49 @@ public class ShenandoahBarrierSet implements BarrierSet {
         }
     }
 
-    private void addLoadReferenceBarrier(ValueNode node, AddressNode address, BarrierType barrierType) {
+    private void addLoadReferenceBarrier(FixedWithNextNode node, AddressNode address, BarrierType barrierType) {
+        GraalError.guarantee(node != null, "input value must not be null");
         StructuredGraph graph = node.graph();
-        ValueNode value = maybeUncompressReference(node);
-        ShenandoahLoadBarrierNode lrb = graph.add(new ShenandoahLoadBarrierNode(value, address, barrierType, false));
-        ValueNode compValue = maybeCompressReference(lrb);
+        boolean narrow = node.stamp(NodeView.DEFAULT) instanceof NarrowOopStamp;
+        ValueNode value = maybeUncompressReference(node, narrow);
+        ShenandoahLoadBarrierNode lrb = graph.add(new ShenandoahLoadBarrierNode(value, address, barrierType, narrow));
+        graph.addAfterFixed(node, lrb);
+        ValueNode compValue = maybeCompressReference(lrb, narrow);
         ValueNode newUsage = node == value ? lrb : value;
         node.replaceAtUsages(compValue, InputType.Value, usage -> usage != newUsage);
     }
 
-    private void addReadNodeBarriers(FloatingAccessNode node) {
-        BarrierType barrierType = node.getBarrierType();
-        System.out.println("LRB on floating read node");
-        GraalError.guarantee(barrierType != BarrierType.REFERENCE_GET, "");
-        if (barrierType == BarrierType.WEAK_REFERS_TO || barrierType == BarrierType.PHANTOM_REFERS_TO) {
-            // No barrier node required
-        } else if (barrierType == BarrierType.READ) {
-            addLoadReferenceBarrier(node, node.getAddress(), barrierType);
-        } else {
-            GraalError.guarantee(node.getBarrierType() == BarrierType.NONE, "invalid barrier on %s %s", node, node.getBarrierType());
-        }
-    }
     private void addReadNodeBarriers(FixedAccessNode node) {
 
         BarrierType barrierType = node.getBarrierType();
         StructuredGraph graph = node.graph();
         if (barrierType == BarrierType.REFERENCE_GET) {
             // Add SATB barrier.
-            ShenandoahReferentFieldReadBarrierNode barrier = graph.add(new ShenandoahReferentFieldReadBarrierNode(node.getAddress(), maybeUncompressReference(node)));
+            boolean narrow = node.stamp(NodeView.DEFAULT) instanceof NarrowOopStamp;
+            ShenandoahReferentFieldReadBarrierNode barrier = graph.add(new ShenandoahReferentFieldReadBarrierNode(node.getAddress(), maybeUncompressReference(node, narrow)));
             graph.addAfterFixed(node, barrier);
 
             // Add load-reference barrier.
-            //addLoadReferenceBarrier(node, node.getAddress(), barrierType);
+            addLoadReferenceBarrier(node, node.getAddress(), barrierType);
         } else if (barrierType == BarrierType.WEAK_REFERS_TO || barrierType == BarrierType.PHANTOM_REFERS_TO) {
             // No barrier node required
         } else if (barrierType == BarrierType.READ || barrierType == BarrierType.ARRAY || barrierType == BarrierType.FIELD || barrierType == BarrierType.UNKNOWN) {
-            //addLoadReferenceBarrier(node, node.getAddress(), barrierType);
+            addLoadReferenceBarrier(node, node.getAddress(), barrierType);
         } else {
             GraalError.guarantee(node.getBarrierType() == BarrierType.NONE, "invalid barrier on %s %s", node, node.getBarrierType());
         }
     }
 
-    protected ValueNode maybeUncompressReference(ValueNode value) {
+    protected ValueNode maybeUncompressReference(ValueNode value, boolean narrow) {
         return value;
     }
-    protected ValueNode maybeCompressReference(ValueNode value) {
+    protected ValueNode maybeCompressReference(ValueNode value, boolean narrow) {
         return value;
     }
 
     private void addShenandoahPreWriteBarrier(FixedAccessNode node, AddressNode address, ValueNode value, boolean doLoad, StructuredGraph graph) {
-        ShenandoahPreWriteBarrierNode preBarrier = graph.add(new ShenandoahPreWriteBarrierNode(address, maybeUncompressReference(value), doLoad));
+        boolean narrow = node.stamp(NodeView.DEFAULT) instanceof NarrowOopStamp;
+        ShenandoahPreWriteBarrierNode preBarrier = graph.add(new ShenandoahPreWriteBarrierNode(address, maybeUncompressReference(value, narrow), doLoad));
         GraalError.guarantee(!node.getUsedAsNullCheck(), "trapping null checks are inserted after write barrier insertion: ", node);
         node.setStateBefore(null);
         graph.addBeforeFixed(node, preBarrier);
@@ -326,5 +320,4 @@ public class ShenandoahBarrierSet implements BarrierSet {
         }
         return null;
     }
-
 }
