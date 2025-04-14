@@ -47,9 +47,12 @@ import jdk.vm.ci.meta.ResolvedJavaType;
 public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
     private CompressEncoding oopEncoding;
 
-    public HotSpotShenandoahBarrierSet(ResolvedJavaType objectArrayType, ResolvedJavaField referentField, CompressEncoding oopEncoding) {
+    public HotSpotShenandoahBarrierSet(ResolvedJavaType objectArrayType, ResolvedJavaField referentField, GraalHotSpotVMConfig config) {
         super(objectArrayType, referentField);
-        this.oopEncoding = oopEncoding;
+        this.oopEncoding = config.getOopEncoding();
+        this.useLoadRefBarrier = config.getFlag("ShenandoahLoadRefBarrier", Boolean.class);
+        this.useSATBBarrier = config.getFlag("ShenandoahSATBBarrier", Boolean.class);
+        this.useCASBarrier = config.getFlag("ShenandoahCASBarrier", Boolean.class);
     }
 
     @Override
@@ -80,7 +83,8 @@ public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
     @Override
     protected ValueNode maybeUncompressReference(ValueNode value, boolean narrow) {
         if (value != null && narrow) {
-            return HotSpotCompressionNode.uncompress(value.graph(), value, oopEncoding);
+            //System.out.println("Uncompressing " + value);
+            return HotSpotCompressionNode.uncompressWithoutUnique(value.graph(), value, oopEncoding);
         }
         return value;
     }
@@ -88,7 +92,8 @@ public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
     @Override
     protected ValueNode maybeCompressReference(ValueNode value, boolean narrow) {
         if (value != null && narrow) {
-            return HotSpotCompressionNode.compress(value.graph(), value, oopEncoding);
+            //System.out.println("Compressing " + value);
+            return HotSpotCompressionNode.compressWithoutUnique(value.graph(), value, oopEncoding);
         }
         return value;
     }

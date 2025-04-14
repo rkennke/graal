@@ -23,7 +23,7 @@ import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_16;
 import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_64;
 
 @NodeInfo(cycles = CYCLES_64, size = SIZE_64)
-public final class ShenandoahLoadBarrierNode extends FixedWithNextNode implements LIRLowerable {
+public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLowerable {
     public static final NodeClass<ShenandoahLoadBarrierNode> TYPE = NodeClass.create(ShenandoahLoadBarrierNode.class);
 
     @Input
@@ -59,6 +59,11 @@ public final class ShenandoahLoadBarrierNode extends FixedWithNextNode implement
 
     @Override
     public void generate(NodeLIRBuilderTool gen) {
+//        System.out.println("generate LRB for input: " + value);
+//        System.out.println("usages:");
+//        for (Node usage : usages()) {
+//            System.out.println("usage: " + usage);
+//        }
         ShenandoahBarrierSetLIRGeneratorTool tool = (ShenandoahBarrierSetLIRGeneratorTool) gen.getLIRGeneratorTool().getBarrierSet();
         gen.setResult(this, tool.emitLoadReferenceBarrier(gen.getLIRGeneratorTool(), gen.operand(value), gen.operand(address), strength, narrow));
     }

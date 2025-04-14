@@ -260,7 +260,7 @@ public abstract class HotSpotBackendFactory implements ArchitectureSpecific {
         if (config.gc == HotSpotGraalRuntime.HotSpotGC.Z) {
             return new HotSpotZBarrierSet(objectArrayType, referentField);
         } else if (config.gc == HotSpotGraalRuntime.HotSpotGC.Shenandoah) {
-            return new HotSpotShenandoahBarrierSet(objectArrayType, referentField, config.getOopEncoding());
+            return new HotSpotShenandoahBarrierSet(objectArrayType, referentField, config);
         } else if (config.gc == HotSpotGraalRuntime.HotSpotGC.Epsilon) {
             return new NoBarrierSet();
         } else if (config.useG1GC()) {

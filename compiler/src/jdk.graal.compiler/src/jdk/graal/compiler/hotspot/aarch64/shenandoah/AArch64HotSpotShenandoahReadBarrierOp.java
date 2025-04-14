@@ -121,7 +121,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
 
             Register thread = providers.getRegisters().getThreadRegister();
 
-            // Move object to result, in case the heap is stable an no barrier needs to be called.
+            // Move object to result, in case the heap is stable and no barrier needs to be called.
             masm.mov(64, resultRegister, objectRegister);
 
             // Check for object being null.

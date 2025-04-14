@@ -25,6 +25,7 @@
  */
 package jdk.graal.compiler.hotspot.aarch64.shenandoah;
 
+import jdk.graal.compiler.asm.aarch64.AArch64Address;
 import jdk.graal.compiler.core.aarch64.AArch64LIRGenerator;
 import jdk.graal.compiler.core.aarch64.AArch64ReadBarrierSetLIRGenerator;
 import jdk.graal.compiler.core.common.CompressEncoding;
@@ -60,13 +61,14 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements Shenandoa
     private final HotSpotProviders providers;
 
     private ForeignCallLinkage getReadBarrierStub(LIRGeneratorTool tool, ShenandoahLoadBarrierNode.ReferenceStrength strength, boolean narrow) {
+        //System.out.println("barrier stub narrow: " + narrow + ", strength: " + strength);
         return switch (strength) {
             case STRONG  -> narrow ? tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_NARROW) :
-                    tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER);
+                                     tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER);
             case WEAK    -> narrow ? tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_WEAK_NARROW) :
-                    tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_WEAK);
+                                     tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_WEAK);
             case PHANTOM -> narrow ? tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_PHANTOM_NARROW) :
-                    tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_PHANTOM);
+                                     tool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_LOAD_BARRIER_PHANTOM);
         };
     }
 
@@ -77,7 +79,7 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements Shenandoa
         Value result = tool.newVariable(tool.toRegisterKind(kind));
         ForeignCallLinkage callTarget = getReadBarrierStub(tool, strength, narrow);
         AllocatableValue object = tool.asAllocatable(obj);
-        AArch64AddressValue loadAddress = ((AArch64LIRGenerator) tool).asAddressValue(address, 64);
+        AArch64AddressValue loadAddress = ((AArch64LIRGenerator) tool).asAddressValue(address, AArch64Address.ANY_SIZE);
         tool.getResult().getFrameMapBuilder().callsMethod(callTarget.getOutgoingCallingConvention());
         tool.append(new AArch64HotSpotShenandoahReadBarrierOp(config, providers, tool.asAllocatable(result), object, loadAddress, callTarget, strength));
         return result;
