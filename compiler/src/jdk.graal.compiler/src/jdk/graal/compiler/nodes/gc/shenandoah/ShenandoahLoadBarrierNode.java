@@ -1,6 +1,8 @@
 package jdk.graal.compiler.nodes.gc.shenandoah;
 
 import jdk.graal.compiler.core.common.memory.BarrierType;
+import jdk.graal.compiler.core.common.type.AbstractObjectStamp;
+import jdk.graal.compiler.core.common.type.Stamp;
 import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.graph.NodeClass;
@@ -13,6 +15,7 @@ import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.NodeView;
 import jdk.graal.compiler.nodes.ValueNode;
 import jdk.graal.compiler.nodes.calc.UnaryNode;
+import jdk.graal.compiler.nodes.memory.LIRLowerableAccess;
 import jdk.graal.compiler.nodes.memory.address.AddressNode;
 import jdk.graal.compiler.nodes.spi.CanonicalizerTool;
 import jdk.graal.compiler.nodes.spi.LIRLowerable;
@@ -64,7 +67,15 @@ public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLow
 //        for (Node usage : usages()) {
 //            System.out.println("usage: " + usage);
 //        }
+        Stamp stamp;
+        if (value instanceof LIRLowerableAccess accessValue) {
+            stamp = accessValue.getAccessStamp(NodeView.DEFAULT);
+        } else {
+            stamp = value.stamp(NodeView.DEFAULT);
+        }
+        GraalError.guarantee(stamp.isObjectStamp(), "LRB value must be object");
+        boolean notNull = ((AbstractObjectStamp)stamp).nonNull();
         ShenandoahBarrierSetLIRGeneratorTool tool = (ShenandoahBarrierSetLIRGeneratorTool) gen.getLIRGeneratorTool().getBarrierSet();
-        gen.setResult(this, tool.emitLoadReferenceBarrier(gen.getLIRGeneratorTool(), gen.operand(value), gen.operand(address), strength, narrow));
+        gen.setResult(this, tool.emitLoadReferenceBarrier(gen.getLIRGeneratorTool(), gen.operand(value), gen.operand(address), strength, narrow, notNull));
     }
 }

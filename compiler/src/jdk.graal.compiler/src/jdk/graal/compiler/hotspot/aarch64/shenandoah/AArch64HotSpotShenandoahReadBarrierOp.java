@@ -107,11 +107,13 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
     protected final ForeignCallLinkage callTarget;
 
     ShenandoahLoadBarrierNode.ReferenceStrength strength;
+    boolean notNull;
 
     public AArch64HotSpotShenandoahReadBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers,
                                                  AllocatableValue result, AllocatableValue object, AArch64AddressValue loadAddress,
                                                  ForeignCallLinkage callTarget,
-                                                 ShenandoahLoadBarrierNode.ReferenceStrength strength) {
+                                                 ShenandoahLoadBarrierNode.ReferenceStrength strength,
+                                                 boolean notNull) {
         super(TYPE);
         this.providers = providers;
         this.config = config;
@@ -120,6 +122,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
         this.loadAddress = loadAddress;
         this.callTarget = callTarget;
         this.strength = strength;
+        this.notNull = notNull;
     }
 
     @Override
@@ -133,18 +136,19 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
 
             Register thread = providers.getRegisters().getThreadRegister();
 
-            // Move object to result, in case the heap is stable and no barrier needs to be called.
-            masm.mov(64, resultRegister, objectRegister);
-
-            // Check for object being null.
-            // TODO: is this needed?
             Label done = new Label();
-            masm.cbz(64, resultRegister, done);
-
-            // Check for heap stability
             Label cset_check = new Label();
             Label slow_path = new Label();
 
+            // Move object to result, in case the heap is stable and no barrier needs to be called.
+            masm.mov(64, resultRegister, objectRegister);
+
+            if (!notNull) {
+                // Check for object being null.
+                masm.cbz(64, resultRegister, done);
+            }
+
+            // Check for heap stability
             int gcStateOffset = HotSpotReplacementsUtil.shenandoahGCStateOffset(config);
             AArch64Address gcState = masm.makeAddress(8, thread, gcStateOffset);
             masm.ldr(8, rscratch1, gcState);

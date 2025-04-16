@@ -73,7 +73,7 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements Shenandoa
     }
 
     @Override
-    public Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadBarrierNode.ReferenceStrength strength, boolean narrow) {
+    public Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadBarrierNode.ReferenceStrength strength, boolean narrow, boolean notNull) {
         PlatformKind platformKind = obj.getPlatformKind();
         LIRKind kind = LIRKind.reference(platformKind);
         Value result = tool.newVariable(tool.toRegisterKind(kind));
@@ -81,7 +81,7 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements Shenandoa
         AllocatableValue object = tool.asAllocatable(obj);
         AArch64AddressValue loadAddress = ((AArch64LIRGenerator) tool).asAddressValue(address, AArch64Address.ANY_SIZE);
         tool.getResult().getFrameMapBuilder().callsMethod(callTarget.getOutgoingCallingConvention());
-        tool.append(new AArch64HotSpotShenandoahReadBarrierOp(config, providers, tool.asAllocatable(result), object, loadAddress, callTarget, strength));
+        tool.append(new AArch64HotSpotShenandoahReadBarrierOp(config, providers, tool.asAllocatable(result), object, loadAddress, callTarget, strength, notNull));
         return result;
     }
 
