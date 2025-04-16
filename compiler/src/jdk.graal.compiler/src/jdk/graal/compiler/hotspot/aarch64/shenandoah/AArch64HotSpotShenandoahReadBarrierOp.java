@@ -27,6 +27,7 @@ package jdk.graal.compiler.hotspot.aarch64.shenandoah;
 
 import jdk.graal.compiler.asm.Label;
 import jdk.graal.compiler.asm.aarch64.AArch64Address;
+import jdk.graal.compiler.asm.aarch64.AArch64Assembler;
 import jdk.graal.compiler.asm.aarch64.AArch64MacroAssembler;
 import jdk.graal.compiler.core.common.spi.ForeignCallLinkage;
 import jdk.graal.compiler.hotspot.GraalHotSpotVMConfig;
@@ -83,7 +84,19 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             return this.value;
         }
     }
+    enum GCState {
+        HAS_FORWARDED(1 << GCStateBitPos.HAS_FORWARDED_BITPOS.value),
+        MARKING(1 << GCStateBitPos.MARKING_BITPOS.value),
+        EVACUATION(1 << GCStateBitPos.EVACUATION_BITPOS.value),
+        UPDATE_REFS(1 << GCStateBitPos.UPDATE_REFS_BITPOS.value),
+        WEAK_ROOTS(1 << GCStateBitPos.WEAK_ROOTS_BITPOS.value),
+        YOUNG_MARKING(1 << GCStateBitPos.YOUNG_MARKING_BITPOS.value),
+        OLD_MARKING(1 << GCStateBitPos.OLD_MARKING_BITPOS.value);
 
+        private final int value;
+        GCState(int val) { this.value = val; }
+        public int getValue() { return this.value; }
+    }
     private final HotSpotProviders providers;
     private final GraalHotSpotVMConfig config;
 
@@ -111,10 +124,9 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
 
     @Override
     public void emitCode(CompilationResultBuilder crb, AArch64MacroAssembler masm) {
-        try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister(); AArch64MacroAssembler.ScratchRegister sc2 = masm.getScratchRegister()) {
+        try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister()) {
             // System.out.println("Emitting Shenandoah load reference barrier");
             Register rscratch1 = sc1.getRegister();
-            Register rscratch2 = sc2.getRegister();
             Register objectRegister = asRegister(object);
             AArch64Address loadAddr = loadAddress.toAddress();
             Register resultRegister = asRegister(result);
@@ -130,52 +142,78 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             masm.cbz(64, resultRegister, done);
 
             // Check for heap stability
-            Label lrb = new Label();
+            Label cset_check = new Label();
+            Label slow_path = new Label();
+
             int gcStateOffset = HotSpotReplacementsUtil.shenandoahGCStateOffset(config);
             AArch64Address gcState = masm.makeAddress(8, thread, gcStateOffset);
-            masm.ldr(8, rscratch2, gcState);
-            masm.tbnz(rscratch2, GCStateBitPos.WEAK_ROOTS_BITPOS.getValue(), lrb);
-            masm.tbz(rscratch2, GCStateBitPos.HAS_FORWARDED_BITPOS.getValue(), done);
-            masm.bind(lrb);
-
-            if (strength == ShenandoahLoadBarrierNode.ReferenceStrength.STRONG) {
-                // Check for object in collection set.
-                // TODO: handle this in slow-path-block.
-                masm.mov(rscratch2, HotSpotReplacementsUtil.shenandoahGCCSetFastTestAddr(config));
-                masm.lsr(64, rscratch1, objectRegister, HotSpotReplacementsUtil.shenandoahGCRegionSizeBytesShift(config));
-                masm.ldr(8, rscratch2, AArch64Address.createRegisterOffsetAddress(8, rscratch2, rscratch1, false));
-                masm.tbz(rscratch2, 0, done);
-            }
-
-            // Make the call to LRB barrier
-            // TODO: handle this in another slow-path-block.
-            CallingConvention cc = callTarget.getOutgoingCallingConvention();
-            assert cc.getArgumentCount() == 2 : "Expecting callTarget to have only 2 parameters. It has " + cc.getArgumentCount();
-
-            // Store first argument
-            AArch64Address cArg0 = (AArch64Address) crb.asAddress(cc.getArgument(0));
-            masm.str(64, objectRegister, cArg0);
-
-            // Store second argument
-            Register addressReg;
-            if (loadAddr.isBaseRegisterOnly()) {
-                // Can directly use the base register as the address
-                addressReg = loadAddr.getBase();
+            masm.ldr(8, rscratch1, gcState);
+            if (strength != ShenandoahLoadBarrierNode.ReferenceStrength.STRONG) {
+                // This is needed because in a short-cut cycle we may get a trailing
+                // weak-roots phase but no evacuation/update-refs phase, and during that,
+                // we need to take the LRB to report null for unreachable weak-refs.
+                // This is true even for non-cset objects.
+                // Two tests because HAS_FORWARDED | WEAK_ROOTS currently is not representable
+                // as a single immediate.
+                masm.tst(64, rscratch1, GCState.HAS_FORWARDED.value);
+                masm.branchConditionally(AArch64Assembler.ConditionFlag.NE, slow_path);
+                masm.tst(64, rscratch1, GCState.WEAK_ROOTS.value);
+                masm.branchConditionally(AArch64Assembler.ConditionFlag.NE, slow_path);
             } else {
-                addressReg = rscratch2;
-                masm.loadAddress(addressReg, loadAddr);
+                masm.tst(64, rscratch1, GCState.HAS_FORWARDED.value);
+                masm.branchConditionally(AArch64Assembler.ConditionFlag.NE, cset_check);
             }
-            AArch64Address cArg1 = (AArch64Address) crb.asAddress(cc.getArgument(1));
-            masm.str(64, addressReg, cArg1);
-
-            // Make the call
-            AArch64Call.directCall(crb, masm, callTarget, AArch64Call.isNearCall(callTarget) ? null : rscratch1, null);
-
-            // Retrieve result and move to the result register.
-            AArch64Address cRet = (AArch64Address) crb.asAddress(cc.getReturn());
-            masm.ldr(64, resultRegister, cRet);
-
             masm.bind(done);
+
+            // Check for object in collection set in an out-of-line mid-path.
+            if (strength == ShenandoahLoadBarrierNode.ReferenceStrength.STRONG) {
+                crb.getLIR().addSlowPath(this, () -> {
+                    try (AArch64MacroAssembler.ScratchRegister tmp1 = masm.getScratchRegister(); AArch64MacroAssembler.ScratchRegister tmp2 = masm.getScratchRegister()) {
+                        Register rtmp1 = tmp1.getRegister();
+                        Register rtmp2 = tmp2.getRegister();
+                        masm.bind(cset_check);
+                        masm.mov(rtmp1, HotSpotReplacementsUtil.shenandoahGCCSetFastTestAddr(config));
+                        masm.lsr(64, rtmp2, objectRegister, HotSpotReplacementsUtil.shenandoahGCRegionSizeBytesShift(config));
+                        masm.ldr(8, rtmp2, AArch64Address.createRegisterOffsetAddress(8, rtmp1, rtmp2, false));
+                        masm.cbnz(8, rtmp2, slow_path);
+                        masm.jmp(done);
+                    }
+                });
+            }
+            // Call runtime slow-path LRB in out-of-line slow-path.
+            crb.getLIR().addSlowPath(this, () -> {
+                try (AArch64MacroAssembler.ScratchRegister tmp1 = masm.getScratchRegister(); AArch64MacroAssembler.ScratchRegister tmp2 = masm.getScratchRegister()) {
+                    Register rtmp1 = tmp1.getRegister();
+                    Register rtmp2 = tmp2.getRegister();
+                    masm.bind(slow_path);
+                    CallingConvention cc = callTarget.getOutgoingCallingConvention();
+                    assert cc.getArgumentCount() == 2 : "Expecting callTarget to have only 2 parameters. It has " + cc.getArgumentCount();
+
+                    // Store first argument
+                    AArch64Address cArg0 = (AArch64Address) crb.asAddress(cc.getArgument(0));
+                    masm.str(64, objectRegister, cArg0);
+
+                    // Store second argument
+                    Register addressReg;
+                    if (loadAddr.isBaseRegisterOnly()) {
+                        // Can directly use the base register as the address
+                        addressReg = loadAddr.getBase();
+                    } else {
+                        addressReg = rtmp1;
+                        masm.loadAddress(addressReg, loadAddr);
+                    }
+                    AArch64Address cArg1 = (AArch64Address) crb.asAddress(cc.getArgument(1));
+                    masm.str(64, addressReg, cArg1);
+
+                    // Make the call
+                    AArch64Call.directCall(crb, masm, callTarget, AArch64Call.isNearCall(callTarget) ? null : rtmp2, null);
+
+                    // Retrieve result and move to the result register.
+                    AArch64Address cRet = (AArch64Address) crb.asAddress(cc.getReturn());
+                    masm.ldr(64, resultRegister, cRet);
+                    masm.jmp(done);
+                }
+            });
         }
     }
 }
