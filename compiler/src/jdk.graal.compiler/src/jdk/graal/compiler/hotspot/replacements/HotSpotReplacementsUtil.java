@@ -733,6 +733,11 @@ public class HotSpotReplacementsUtil {
     }
 
     @Fold
+    public static int shenandoahCardTableOffset(@InjectedParameter GraalHotSpotVMConfig config) {
+        return config.shenandoahCardTableOffset;
+    }
+
+    @Fold
     public static int shenandoahGCRegionSizeBytesShift(@InjectedParameter GraalHotSpotVMConfig config) {
         return config.shenandoahGCRegionSizeBytesShift;
     }

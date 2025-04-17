@@ -65,6 +65,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
     protected boolean useLoadRefBarrier;
     protected boolean useSATBBarrier;
     protected boolean useCASBarrier;
+    protected boolean useCardBarrier;
 
     public ShenandoahBarrierSet(ResolvedJavaType objectArrayType, ResolvedJavaField referentField) {
         this.referentField = referentField;
@@ -72,6 +73,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
         this.useLoadRefBarrier = true;
         this.useSATBBarrier = true;
         this.useCASBarrier = true;
+        this.useCardBarrier = true;
     }
 
     @Override
@@ -212,6 +214,9 @@ public class ShenandoahBarrierSet implements BarrierSet {
                         // be explicitly skipped when this is an initializing store.
                         // No keep-alive means no need for the pre-barrier.
                         addShenandoahPreWriteBarrier(node, node.getAddress(), expectedValue, doLoad, graph);
+                    }
+                    if (!init && useCardBarrier && !StampTool.isPointerAlwaysNull(writtenValue)) {
+                        graph.addAfterFixed(node, graph.add(new ShenandoahCardBarrierNode(node.getAddress())));
                     }
                 }
                 break;

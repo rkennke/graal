@@ -33,4 +33,6 @@ public interface ShenandoahBarrierSetLIRGeneratorTool extends BarrierSetLIRGener
     Value emitLoadReferenceBarrier(LIRGeneratorTool tool, Value obj, Value address, ShenandoahLoadBarrierNode.ReferenceStrength strength, boolean narrow, boolean notNull);
 
     void emitPreWriteBarrier(LIRGeneratorTool lirTool, Value address, AllocatableValue expectedObject, boolean nonNull);
+
+    void emitCardBarrier(LIRGeneratorTool lirTool, Value address);
 }

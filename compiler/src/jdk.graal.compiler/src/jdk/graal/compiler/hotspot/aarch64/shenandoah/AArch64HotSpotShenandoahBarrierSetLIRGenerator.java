@@ -100,6 +100,13 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements Shenandoa
         lirTool.append(new AArch64ShenandoahPreWriteBarrierOp(config, providers, addressValue, expectedObject, temp, temp2, callTarget, nonNull));
     }
 
+    @Override
+    public void emitCardBarrier(LIRGeneratorTool lirTool, Value address) {
+        AArch64AddressValue addr = ((AArch64LIRGenerator) lirTool).asAddressValue(address, AArch64Address.ANY_SIZE);
+        AllocatableValue tmp = lirTool.newVariable(LIRKind.value(AArch64Kind.QWORD));
+        lirTool.append(new AArch64HotSpotShenandoahCardBarrierOp(config, providers, addr, tmp));
+    }
+
     private static ShenandoahLoadBarrierNode.ReferenceStrength getReferenceStrength(BarrierType barrierType) {
         return switch (barrierType) {
             case READ, NONE -> ShenandoahLoadBarrierNode.ReferenceStrength.STRONG;

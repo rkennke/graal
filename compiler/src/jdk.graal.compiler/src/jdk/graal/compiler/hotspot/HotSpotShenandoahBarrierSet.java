@@ -53,6 +53,7 @@ public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
         this.useLoadRefBarrier = config.getFlag("ShenandoahLoadRefBarrier", Boolean.class);
         this.useSATBBarrier = config.getFlag("ShenandoahSATBBarrier", Boolean.class);
         this.useCASBarrier = config.getFlag("ShenandoahCASBarrier", Boolean.class);
+        this.useCardBarrier = config.getFlag("ShenandoahCardBarrier", Boolean.class);
     }
 
     @Override
