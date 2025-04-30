@@ -27,6 +27,7 @@ package jdk.graal.compiler.hotspot.aarch64.shenandoah;
 
 import jdk.graal.compiler.asm.Label;
 import jdk.graal.compiler.asm.aarch64.AArch64Address;
+import jdk.graal.compiler.asm.aarch64.AArch64Assembler;
 import jdk.graal.compiler.asm.aarch64.AArch64MacroAssembler;
 import jdk.graal.compiler.core.common.CompressEncoding;
 import jdk.graal.compiler.core.common.spi.ForeignCallLinkage;
@@ -107,58 +108,66 @@ public class AArch64ShenandoahPreWriteBarrierOp extends AArch64LIRInstruction {
         guaranteeDifferentRegisters(storeAddress, thread, tmp, previousValue);
 
         Label done = new Label();
+        Label midPath = new Label();
         Label runtime = new Label();
 
         // Is marking active?
         int gcStateOffset = HotSpotReplacementsUtil.shenandoahGCStateOffset(config);
         AArch64Address gcState = masm.makeAddress(8, thread, gcStateOffset);
         masm.ldr(8, tmp, gcState);
-        masm.tbz(tmp, AArch64HotSpotShenandoahReadBarrierOp.GCStateBitPos.MARKING_BITPOS.getValue(), done);
-
-        // Do we need to load the previous value?
-        if (expectedObject.equals(Value.ILLEGAL)) {
-            loadObject(masm, previousValue, storeAddress);
-        }
-
-        if (!nonNull) {
-            // Is the previous value null?
-            masm.cbz(64, previousValue, done);
-        }
-
-        if (VerifyAssemblyGCBarriers.getValue(crb.getOptions())) {
-            try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister()) {
-                Register tmp2 = sc1.getRegister();
-                verifyOop(masm, previousValue, tmp, tmp2, false, true);
-            }
-        }
-
-        if (AssemblyGCBarriersSlowPathOnly.getValue(crb.getOptions())) {
-            masm.jmp(runtime);
-        } else {
-            int satbQueueIndexOffset = HotSpotReplacementsUtil.shenandoahSATBIndexOffset(config);
-            AArch64Address satbQueueIndex = masm.makeAddress(64, thread, satbQueueIndexOffset);
-            // tmp := *index_adr
-            // if tmp == 0 then goto runtime
-            masm.ldr(64, tmp, satbQueueIndex);
-            masm.cbz(64, tmp, runtime);
-
-            // tmp := tmp - wordSize
-            // *index_adr := tmp
-            // tmp := tmp + *buffer_adr
-            masm.sub(64, tmp, tmp, 8);
-            masm.str(64, tmp, satbQueueIndex);
-            try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister()) {
-                Register scratch1 = sc1.getRegister();
-                int satbQueueBufferOffset = HotSpotReplacementsUtil.shenandoahSATBBufferOffset(config);
-                AArch64Address satbQueueBuffer = masm.makeAddress(64, thread, satbQueueBufferOffset);
-                masm.ldr(64, scratch1, satbQueueBuffer);
-                masm.add(64, tmp, tmp, scratch1);
-            }
-
-            // Record the previous value
-            masm.str(64, previousValue, masm.makeAddress(64, tmp, 0));
-        }
+        masm.tst(64, tmp, AArch64HotSpotShenandoahReadBarrierOp.GCState.MARKING.getValue());
+        masm.branchConditionally(AArch64Assembler.ConditionFlag.NE, midPath);
         masm.bind(done);
+
+        // Out of line mid-path.
+        crb.getLIR().addSlowPath(this, () -> {
+            masm.bind(midPath);
+
+            // Do we need to load the previous value?
+            if (expectedObject.equals(Value.ILLEGAL)) {
+                loadObject(masm, previousValue, storeAddress);
+            }
+
+            if (!nonNull) {
+                // Is the previous value null?
+                masm.cbz(64, previousValue, done);
+            }
+
+            if (VerifyAssemblyGCBarriers.getValue(crb.getOptions())) {
+                try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister()) {
+                    Register tmp2 = sc1.getRegister();
+                    verifyOop(masm, previousValue, tmp, tmp2, false, true);
+                }
+            }
+
+            if (AssemblyGCBarriersSlowPathOnly.getValue(crb.getOptions())) {
+                masm.jmp(runtime);
+            } else {
+                int satbQueueIndexOffset = HotSpotReplacementsUtil.shenandoahSATBIndexOffset(config);
+                AArch64Address satbQueueIndex = masm.makeAddress(64, thread, satbQueueIndexOffset);
+                // tmp := *index_adr
+                // if tmp == 0 then goto runtime
+                masm.ldr(64, tmp, satbQueueIndex);
+                masm.cbz(64, tmp, runtime);
+
+                // tmp := tmp - wordSize
+                // *index_adr := tmp
+                // tmp := tmp + *buffer_adr
+                masm.sub(64, tmp, tmp, 8);
+                masm.str(64, tmp, satbQueueIndex);
+                try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister()) {
+                    Register scratch1 = sc1.getRegister();
+                    int satbQueueBufferOffset = HotSpotReplacementsUtil.shenandoahSATBBufferOffset(config);
+                    AArch64Address satbQueueBuffer = masm.makeAddress(64, thread, satbQueueBufferOffset);
+                    masm.ldr(64, scratch1, satbQueueBuffer);
+                    masm.add(64, tmp, tmp, scratch1);
+                }
+
+                // Record the previous value
+                masm.str(64, previousValue, masm.makeAddress(64, tmp, 0));
+                masm.jmp(done);
+            }
+        });
 
         // Out of line slow path
         crb.getLIR().addSlowPath(this, () -> {
