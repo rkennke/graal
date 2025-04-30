@@ -373,7 +373,7 @@ public abstract class DefaultHotSpotLoweringProvider extends DefaultJavaLowering
          * In the case of ZGC, ZeroMemoryNode ZeroMemoryNode can't be used with Object[] unless it's
          * known to be in eden.
          */
-        return getVMConfig().gc != HotSpotGC.Z || !elementKind.isObject();
+        return (getVMConfig().gc != HotSpotGC.Z && getVMConfig().gc != HotSpotGC.Shenandoah) || !elementKind.isObject();
     }
 
     @Override
