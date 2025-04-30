@@ -29,9 +29,9 @@ import static jdk.graal.compiler.nodes.NamedLocationIdentity.OFF_HEAP_LOCATION;
 import jdk.graal.compiler.core.common.type.AbstractObjectStamp;
 import jdk.graal.compiler.hotspot.replacements.HotSpotReplacementsUtil;
 import jdk.graal.compiler.nodeinfo.InputType;
-import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.extended.ArrayRangeWrite;
 import jdk.graal.compiler.nodes.gc.BarrierSet;
+import jdk.graal.compiler.nodes.java.ValueCompareAndSwapNode;
 import jdk.graal.compiler.nodes.spi.CoreProviders;
 import jdk.graal.compiler.nodes.type.NarrowOopStamp;
 import org.graalvm.word.LocationIdentity;
@@ -155,7 +155,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
             if (type != null && type.isArray()) {
                 return BarrierType.ARRAY;
             } else if (type == null || type.isAssignableFrom(objectArrayType)) {
-                return BarrierType.UNKNOWN;
+                return BarrierType.ARRAY;
             } else {
                 return BarrierType.FIELD;
             }
@@ -187,7 +187,9 @@ public class ShenandoahBarrierSet implements BarrierSet {
             case AbstractCompareAndSwapNode cmpSwap -> {
                 if (useCASBarrier) {
                     addWriteBarriers(cmpSwap, cmpSwap.getNewValue(), cmpSwap.getExpectedValue(), false);
-                    addReadNodeBarriers(cmpSwap);
+                    if (cmpSwap instanceof ValueCompareAndSwapNode) {
+                        addReadNodeBarriers(cmpSwap);
+                    }
                 }
             }
             case ArrayRangeWrite ignored -> GraalError.unimplemented("ArrayRangeWrite is not used");
