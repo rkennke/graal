@@ -107,6 +107,13 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
      */
     protected Object fieldValueInterceptor;
 
+    /**
+     * When building layered images, for static fields we must keep track of what layer's static
+     * fields array the field is assigned in. This also impacts when the underlying value can be
+     * read and/or constant folded.
+     */
+    private final boolean isLayeredStaticField;
+
     @SuppressWarnings("this-escape")
     public AnalysisField(AnalysisUniverse universe, ResolvedJavaField wrappedField) {
         super(universe.hostVM.enableTrackAcrossLayers());
@@ -152,6 +159,7 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
             id = universe.computeNextFieldId();
             isInBaseLayer = false;
         }
+        isLayeredStaticField = isStatic() && universe.hostVM.buildingImageLayer();
     }
 
     @Override
@@ -186,6 +194,22 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
 
     public boolean isInBaseLayer() {
         return isInBaseLayer;
+    }
+
+    public boolean installableInLayer() {
+        if (isLayeredStaticField) {
+            return getUniverse().hostVM.installableInLayer(this);
+        } else {
+            return true;
+        }
+    }
+
+    public boolean preventConstantFolding() {
+        if (isLayeredStaticField) {
+            return getUniverse().hostVM.preventConstantFolding(this);
+        } else {
+            return false;
+        }
     }
 
     @Override
@@ -320,13 +344,22 @@ public abstract class AnalysisField extends AnalysisElement implements WrappedJa
 
             registerAsWritten(reason);
 
-            if (isStatic()) {
-                /* Register the static field as unsafe accessed with the analysis universe. */
-                getUniverse().registerUnsafeAccessedStaticField(this);
+            if (getUniverse().analysisPolicy().useConservativeUnsafeAccess()) {
+                /*
+                 * With conservative unsafe access we don't need to track unsafe accessed fields.
+                 * Instead, fields marked as unsafe-accessed are injected all instantiated subtypes
+                 * of their declared type. Moreover, all unsafe loads are pre-saturated.
+                 */
+                injectDeclaredType();
             } else {
-                /* Register the instance field as unsafe accessed on the declaring type. */
-                AnalysisType declaringType = getDeclaringClass();
-                declaringType.registerUnsafeAccessedField(this);
+                if (isStatic()) {
+                    /* Register the static field as unsafe accessed with the analysis universe. */
+                    getUniverse().registerUnsafeAccessedStaticField(this);
+                } else {
+                    /* Register the instance field as unsafe accessed on the declaring type. */
+                    AnalysisType declaringType = getDeclaringClass();
+                    declaringType.registerUnsafeAccessedField(this);
+                }
             }
         });
     }

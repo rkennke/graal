@@ -36,6 +36,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -83,6 +84,8 @@ import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
 import jdk.graal.compiler.debug.CounterKey;
 import jdk.graal.compiler.nodes.EncodedGraph;
 import jdk.graal.compiler.nodes.FieldLocationIdentity;
+import jdk.graal.compiler.nodes.NodeClassMap;
+import jdk.graal.compiler.serviceprovider.JavaVersionUtil;
 import jdk.graal.compiler.util.ObjectCopier;
 import jdk.graal.compiler.util.ObjectCopierInputStream;
 import jdk.graal.compiler.util.ObjectCopierOutputStream;
@@ -120,6 +123,8 @@ public class SVMImageLayerSnapshotUtil {
     protected static final Set<Field> dynamicHubCompanionRelinkedFields = Set.of(classInitializationInfo, superHub, arrayHub);
 
     private static final Class<?> sourceRoots = ReflectionUtil.lookupClass("com.oracle.svm.hosted.image.sources.SourceCache$SourceRoots");
+    private static final Class<?> completableFuture = JavaVersionUtil.JAVA_SPEC <= 21 ? ReflectionUtil.lookupClass("com.oracle.svm.core.jdk.CompletableFutureJDK21FieldHolder")
+                    : ReflectionUtil.lookupClass("com.oracle.svm.core.jdk.CompletableFutureFieldHolder");
 
     /**
      * This map stores the field indexes that should be relinked using the hosted value of a
@@ -199,7 +204,7 @@ public class SVMImageLayerSnapshotUtil {
 
     private static boolean shouldScanClass(Class<?> clazz) {
         /* This class should not be scanned because it needs to be initialized after the analysis */
-        return !clazz.equals(sourceRoots);
+        return !clazz.equals(sourceRoots) && !clazz.equals(completableFuture);
     }
 
     /**
@@ -227,16 +232,19 @@ public class SVMImageLayerSnapshotUtil {
         return typeRelinkedFieldsSet.stream().map(metaAccess::lookupJavaField).map(AnalysisField::getPosition).collect(Collectors.toSet());
     }
 
-    public SVMGraphEncoder getGraphEncoder() {
-        return new SVMGraphEncoder(externalValues);
+    public SVMGraphEncoder getGraphEncoder(NodeClassMap nodeClassMap) {
+        return new SVMGraphEncoder(externalValues, nodeClassMap);
     }
 
-    public AbstractSVMGraphDecoder getGraphHostedToAnalysisElementsDecoder(SVMImageLayerLoader imageLayerLoader, AnalysisMethod analysisMethod, SnippetReflectionProvider snippetReflectionProvider) {
-        return new SVMGraphHostedToAnalysisElementsDecoder(EncodedGraph.class.getClassLoader(), imageLayerLoader, analysisMethod, snippetReflectionProvider);
+    public AbstractSVMGraphDecoder getGraphHostedToAnalysisElementsDecoder(SVMImageLayerLoader imageLayerLoader, AnalysisMethod analysisMethod, SnippetReflectionProvider snippetReflectionProvider,
+                    NodeClassMap nodeClassMap) {
+
+        return new SVMGraphHostedToAnalysisElementsDecoder(EncodedGraph.class.getClassLoader(), imageLayerLoader, analysisMethod, snippetReflectionProvider, nodeClassMap);
     }
 
-    public AbstractSVMGraphDecoder getGraphDecoder(SVMImageLayerLoader imageLayerLoader, AnalysisMethod analysisMethod, SnippetReflectionProvider snippetReflectionProvider) {
-        return new SVMGraphDecoder(EncodedGraph.class.getClassLoader(), imageLayerLoader, analysisMethod, snippetReflectionProvider);
+    public AbstractSVMGraphDecoder getGraphDecoder(SVMImageLayerLoader imageLayerLoader, AnalysisMethod analysisMethod,
+                    SnippetReflectionProvider snippetReflectionProvider, NodeClassMap nodeClassMap) {
+        return new SVMGraphDecoder(EncodedGraph.class.getClassLoader(), imageLayerLoader, analysisMethod, snippetReflectionProvider, nodeClassMap);
     }
 
     /**
@@ -342,7 +350,7 @@ public class SVMImageLayerSnapshotUtil {
 
     public static class SVMGraphEncoder extends ObjectCopier.Encoder {
         @SuppressWarnings("this-escape")
-        public SVMGraphEncoder(Map<Object, Field> externalValues) {
+        public SVMGraphEncoder(Map<Object, Field> externalValues, NodeClassMap nodeClassMap) {
             super(externalValues);
             addBuiltin(new ImageHeapConstantBuiltIn(null));
             addBuiltin(new AnalysisTypeBuiltIn(null));
@@ -356,6 +364,9 @@ public class SVMImageLayerSnapshotUtil {
             addBuiltin(new CInterfaceLocationIdentityBuiltIn());
             addBuiltin(new FastThreadLocalLocationIdentityBuiltIn());
             addBuiltin(new VMThreadLocalInfoBuiltIn());
+            if (nodeClassMap != null) {
+                addBuiltin(new NodeClassMapBuiltin(nodeClassMap));
+            }
         }
 
         @Override
@@ -374,7 +385,8 @@ public class SVMImageLayerSnapshotUtil {
         private final HostedImageLayerBuildingSupport imageLayerBuildingSupport;
 
         @SuppressWarnings("this-escape")
-        public AbstractSVMGraphDecoder(ClassLoader classLoader, SVMImageLayerLoader imageLayerLoader, AnalysisMethod analysisMethod, SnippetReflectionProvider snippetReflectionProvider) {
+        public AbstractSVMGraphDecoder(ClassLoader classLoader, SVMImageLayerLoader imageLayerLoader, AnalysisMethod analysisMethod, SnippetReflectionProvider snippetReflectionProvider,
+                        NodeClassMap nodeClassMap) {
             super(classLoader);
             this.imageLayerBuildingSupport = imageLayerLoader.getImageLayerBuildingSupport();
             addBuiltin(new ImageHeapConstantBuiltIn(imageLayerLoader));
@@ -387,6 +399,9 @@ public class SVMImageLayerSnapshotUtil {
             addBuiltin(new CInterfaceLocationIdentityBuiltIn());
             addBuiltin(new FastThreadLocalLocationIdentityBuiltIn());
             addBuiltin(new VMThreadLocalInfoBuiltIn());
+            if (nodeClassMap != null) {
+                addBuiltin(new NodeClassMapBuiltin(nodeClassMap));
+            }
         }
 
         @Override
@@ -398,8 +413,8 @@ public class SVMImageLayerSnapshotUtil {
     public static class SVMGraphHostedToAnalysisElementsDecoder extends AbstractSVMGraphDecoder {
         @SuppressWarnings("this-escape")
         public SVMGraphHostedToAnalysisElementsDecoder(ClassLoader classLoader, SVMImageLayerLoader svmImageLayerLoader, AnalysisMethod analysisMethod,
-                        SnippetReflectionProvider snippetReflectionProvider) {
-            super(classLoader, svmImageLayerLoader, analysisMethod, snippetReflectionProvider);
+                        SnippetReflectionProvider snippetReflectionProvider, NodeClassMap nodeClassMap) {
+            super(classLoader, svmImageLayerLoader, analysisMethod, snippetReflectionProvider, nodeClassMap);
             addBuiltin(new HostedToAnalysisTypeDecoderBuiltIn(svmImageLayerLoader));
             addBuiltin(new HostedToAnalysisMethodDecoderBuiltIn(svmImageLayerLoader));
         }
@@ -407,10 +422,37 @@ public class SVMImageLayerSnapshotUtil {
 
     public static class SVMGraphDecoder extends AbstractSVMGraphDecoder {
         @SuppressWarnings("this-escape")
-        public SVMGraphDecoder(ClassLoader classLoader, SVMImageLayerLoader svmImageLayerLoader, AnalysisMethod analysisMethod, SnippetReflectionProvider snippetReflectionProvider) {
-            super(classLoader, svmImageLayerLoader, analysisMethod, snippetReflectionProvider);
+        public SVMGraphDecoder(ClassLoader classLoader, SVMImageLayerLoader svmImageLayerLoader, AnalysisMethod analysisMethod,
+                        SnippetReflectionProvider snippetReflectionProvider, NodeClassMap nodeClassMap) {
+            super(classLoader, svmImageLayerLoader, analysisMethod, snippetReflectionProvider, nodeClassMap);
             addBuiltin(new HostedTypeBuiltIn(svmImageLayerLoader));
             addBuiltin(new HostedMethodBuiltIn(svmImageLayerLoader));
+        }
+    }
+
+    /**
+     * Builtin to replace a {@link NodeClassMap} during encoding with a placeholder so that a single
+     * map will be shared by all {@link EncodedGraph}s processed by a
+     * {@link jdk.graal.compiler.util.ObjectCopier.Encoder}.
+     */
+    public static class NodeClassMapBuiltin extends ObjectCopier.Builtin {
+        private final NodeClassMap nodeClassMap;
+
+        protected NodeClassMapBuiltin(NodeClassMap nodeClassMap) {
+            super(NodeClassMap.class);
+            this.nodeClassMap = Objects.requireNonNull(nodeClassMap);
+        }
+
+        @Override
+        public void encode(ObjectCopier.Encoder encoder, ObjectCopierOutputStream stream, Object obj) throws IOException {
+            if (nodeClassMap != obj) {
+                throw AnalysisError.shouldNotReachHere("Unexpected NodeClassMap instance encountered");
+            }
+        }
+
+        @Override
+        protected Object decode(ObjectCopier.Decoder decoder, Class<?> concreteType, ObjectCopierInputStream stream) throws IOException {
+            return nodeClassMap;
         }
     }
 

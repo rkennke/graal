@@ -692,7 +692,7 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
         return LANGUAGE.createOptionDescriptorsUnion(engineOptionDescriptors, compilerOptionDescriptors);
     }
 
-    void patch(SandboxPolicy newSandboxPolicy,
+    boolean patch(SandboxPolicy newSandboxPolicy,
                     DispatchOutputStream newOut,
                     DispatchOutputStream newErr,
                     InputStream newIn,
@@ -713,7 +713,9 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
         this.logHandler = newLogHandler;
         this.engineOptionValues = engineOptions;
         this.logLevels = newLogConfig.logLevels;
-        this.internalResourceRoots.patch();
+        if (!this.internalResourceRoots.patch(this)) {
+            return false;
+        }
 
         if (PreInitContextHostLanguage.isInstance(hostLanguage)) {
             this.hostLanguage = createLanguage(LanguageCache.createHostLanguageCache(newHostLanguage), HOST_LANGUAGE_INDEX, null);
@@ -764,6 +766,7 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
         }
         validateSandbox();
         printDeprecatedOptionsWarning(deprecatedDescriptors);
+        return true;
     }
 
     static LogHandler createLogHandler(LogConfig logConfig, DispatchOutputStream errDispatchOutputStream, SandboxPolicy sandboxPolicy) {
@@ -1173,25 +1176,31 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
 
     PolyglotLanguage requireLanguage(String id, boolean allowInternal) {
         checkState();
-        PolyglotLanguage language;
+        Map<String, PolyglotLanguage> useLanguages;
         if (allowInternal) {
-            language = idToLanguage.get(id);
+            useLanguages = idToLanguage;
         } else {
-            language = idToPublicLanguage.get(id);
+            useLanguages = idToPublicLanguage;
         }
+        PolyglotLanguage language = useLanguages.get(id);
         if (language == null) {
-            throw throwNotInstalled(id, idToLanguage.keySet());
+            throw throwNotInstalled(id, useLanguages.keySet());
         }
         return language;
     }
 
-    private static RuntimeException throwNotInstalled(String id, Set<String> allLanguages) {
+    private RuntimeException throwNotInstalled(String id, Set<String> allLanguages) {
         String misspelledGuess = matchSpellingError(allLanguages, id);
         String didYouMean = "";
         if (misspelledGuess != null) {
             didYouMean = String.format("Did you mean '%s'? ", misspelledGuess);
         }
-        throw PolyglotEngineException.illegalArgument(String.format("A language with id '%s' is not installed. %sInstalled languages are: %s.", id, didYouMean, allLanguages));
+        String internalLanguageHint = "";
+        if (idToLanguage.containsKey(id)) {
+            // no access to internal, but internal language available
+            internalLanguageHint = "A language with this id is installed, but only available internally. ";
+        }
+        throw PolyglotEngineException.illegalArgument(String.format("A language with id '%s' is not available. %s%sAvailable languages are: %s.", id, didYouMean, internalLanguageHint, allLanguages));
     }
 
     private static String matchSpellingError(Set<String> allIds, String enteredId) {
@@ -2513,7 +2522,7 @@ final class PolyglotEngineImpl implements com.oracle.truffle.polyglot.PolyglotIm
      */
     static void logFallback(String message) {
         PrintStream err = System.err;
-        err.println(message);
+        err.print(message);
     }
 
     private static class MessageTransportProxy implements MessageTransport {

@@ -97,13 +97,13 @@ suite = {
       "digest": "sha512:22569a011d207fb8f33e7e71162542a5748cc3daa67eec59cbdc2aeb0894c331dfb8b6100ea88529c6cea72672cbddd77ca6134ddf331685d68b3e72b4e0a914",
     },
 
-    "JCODINGS_1.0.58": {
-      "digest" : "sha512:625210aa07d1e08bf2f5fdc9da6c491a4e5a56e7db297cba1aa73636670ac1d62f3fd763716ef6ede862456b17169272ed9c8461d07100f95262163dc9c18ef8",
-      "sourceDigest" : "sha512:d0f883f658310f7ad091aea08df28f1f5fe12080d6cb266cd91aec7e34cda1d57736d32618e8632b329854367d6e4d5fc91b5eb8ac9b823b26113fae3f75f50c",
+    "JCODINGS_1.0.63": {
+      "digest" : "sha512:280e989a1af7679da82bb9adb27a8c4e08c8da09f0bb93c380a36bfe7071c62bc9e7248b634d9e04f3ab275ec0672a44f8ab41dca8c10128c4351b6302275e84",
+      "sourceDigest" : "sha512:f6843609284be7dbfdbc7530e34c15e6aea7d3a45c4ee8e6836ee42fafbb9306f7234e20d8abbfc6a13e28d885eb5d743d69bfbbf738932db1fe42e031a835e3",
       "maven": {
         "groupId": "org.jruby.jcodings",
         "artifactId": "jcodings",
-        "version": "1.0.58",
+        "version": "1.0.63",
       },
       "license": ["MIT"],
     },
@@ -318,7 +318,7 @@ suite = {
           "jdk.internal.access",
         ],
       },
-      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR", "TRUFFLE_LIBGRAAL_PROCESSOR"],
+      "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "checkstyle" : "com.oracle.truffle.api",
       "javaCompliance" : "17+",
       "workingSets" : "API,Truffle",
@@ -419,30 +419,6 @@ suite = {
       "checkstyle" : "com.oracle.truffle.dsl.processor",
       "javaCompliance" : "17+",
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
-      "workingSets" : "API,Truffle,Test",
-      "jacoco" : "exclude",
-      "graalCompilerSourceEdition": "ignore",
-    },
-
-    "com.oracle.truffle.api.benchmark" : {
-      "subDir" : "src",
-      "sourceDirs" : ["src"],
-      "dependencies" : [
-        "com.oracle.truffle.api.instrumentation.test",
-        "TRUFFLE_API",
-        "mx:JMH_1_21",
-      ],
-      "requires" : [
-        "jdk.unsupported", # sun.misc.Unsafe
-      ],
-      "requiresConcealed" : {
-        "java.base" : ["jdk.internal.loader"],
-      },
-      "checkstyle" : "com.oracle.truffle.dsl.processor",
-      "javaCompliance" : "17+",
-      "spotbugsIgnoresGenerated" : True,
-      "testProject" : True,
-      "annotationProcessors" : ["mx:JMH_1_21", "TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "API,Truffle,Test",
       "jacoco" : "exclude",
       "graalCompilerSourceEdition": "ignore",
@@ -582,6 +558,7 @@ suite = {
       "checkstyle" : "com.oracle.truffle.dsl.processor",
       "javaCompliance" : "17+",
       "checkstyleVersion" : "10.21.0",
+      "jacoco" : "exclude",
       "workingSets" : "Truffle,Codegen",
       "graalCompilerSourceEdition": "ignore",
     },
@@ -720,6 +697,30 @@ suite = {
       "dependencies" : [
         "TRUFFLE_API",
         "mx:JUNIT",
+        "TRUFFLE_JCODINGS",
+      ],
+      "requires" : [
+        "jdk.unsupported", # sun.misc.Unsafe
+      ],
+      "checkstyle" : "com.oracle.truffle.api",
+      "javaCompliance" : "17+",
+      "annotationProcessors" : [
+        "TRUFFLE_DSL_PROCESSOR",
+      ],
+      "requiresConcealed" : {
+        "java.base" : ["jdk.internal.loader"],
+      },
+      "workingSets" : "API,Truffle,Codegen,Test",
+      "jacoco" : "exclude",
+      "testProject" : True,
+      "graalCompilerSourceEdition": "ignore",
+    },
+
+    "org.graalvm.truffle.benchmark" : {
+      "subDir" : "src",
+      "sourceDirs" : ["src"],
+      "dependencies" : [
+        "TRUFFLE_API",
         "mx:JMH_1_21",
         "TRUFFLE_JCODINGS",
       ],
@@ -735,12 +736,11 @@ suite = {
       "requiresConcealed" : {
         "java.base" : ["jdk.internal.loader"],
       },
-      "workingSets" : "API,Truffle,Codegen,Test",
+      "workingSets" : "API,Truffle,Codegen,Bench",
       "jacoco" : "exclude",
       "testProject" : True,
       "graalCompilerSourceEdition": "ignore",
     },
-
 
     "com.oracle.truffle.api.staticobject" : {
       "subDir" : "src",
@@ -771,6 +771,7 @@ suite = {
       "javaCompliance" : "17+",
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "API,Truffle,Test",
+      "jacoco" : "exclude",
       "testProject" : True,
       "graalCompilerSourceEdition": "ignore",
     },
@@ -869,7 +870,7 @@ suite = {
         "jdk.unsupported", # sun.misc.Unsafe
       ],
       "checkstyle" : "com.oracle.truffle.api",
-      "javaCompliance" : "17+",
+      "javaCompliance" : "20+",
       "annotationProcessors" : ["TRUFFLE_DSL_PROCESSOR"],
       "workingSets" : "Truffle,Test",
       "jacoco" : "exclude",
@@ -1165,6 +1166,7 @@ suite = {
       "checkstyle" : "com.oracle.truffle.api",
       "javaCompliance" : "17+",
       "workingSets" : "Truffle,SimpleLanguage",
+      "jacoco" : "exclude",
       "graalCompilerSourceEdition": "ignore",
     },
 
@@ -1365,17 +1367,6 @@ suite = {
       "graalCompilerSourceEdition": "ignore",
     },
 
-    "com.oracle.truffle.libgraal.processor" : {
-      "subDir" : "src",
-      "sourceDirs" : ["src"],
-      "requires" : [
-        "java.compiler",
-        "jdk.management"
-      ],
-      "checkstyle" : "com.oracle.truffle.api",
-      "javaCompliance" : "17+",
-    },
-
     "org.graalvm.shadowed.org.json" : {
       # shaded org.json/json
       "subDir" : "src",
@@ -1473,7 +1464,7 @@ suite = {
           "TRUFFLE_API"
       ],
       "shadedDependencies" : [
-        "truffle:JCODINGS_1.0.58",
+        "truffle:JCODINGS_1.0.63",
       ],
       "class" : "ShadedLibraryProject",
       "shade" : {
@@ -1495,34 +1486,6 @@ suite = {
         "patch" : {
           "org/jcodings/util/ArrayReader.java" : {
             "\"/tables/\"" : "\"/org/graalvm/shadowed/org/jcodings/tables/\"",
-          },
-          # Fix CESU8Encoding.leftAdjustCharHead by applying a stripped down version of:
-          # https://github.com/jruby/jcodings/pull/61/ (not in 1.0.58; remove when updating to a newer version).
-          "org/jcodings/specific/CESU8Encoding.java" : {
-"""
-  (public int leftAdjustCharHead\\(byte\\[\\] bytes, int p, int s, int end\\) {
-    if \\(s <= p\\)
-      return s;
-    int p_ = s;
-    while \\(!utf8IsLead\\(bytes\\[p_\\] & 0xff\\) && p_ > p\\)
-      p_--;)(
-    return p_;
-  })
-""" : """
-  \\1
-    if (p_ > p && s - p_ == 2 && Character.isLowSurrogate((char) utf8Decode3ByteSequence(bytes, p_))) {
-      int pSurrogatePair = p_ - 1;
-      while (!utf8IsLead(bytes[pSurrogatePair] & 0xff) && pSurrogatePair > p)
-        pSurrogatePair--;
-      if (p_ - pSurrogatePair == 3 && Character.isHighSurrogate((char) utf8Decode3ByteSequence(bytes, pSurrogatePair))) {
-        return pSurrogatePair;
-      }
-    }\\2
-
-  private static int utf8Decode3ByteSequence(byte[] bytes, int p) {
-    return ((bytes[p] & 0xF) << 12) | ((bytes[p + 1] & 0xff & 0x3f) << 6) | (bytes[p + 2] & 0xff & 0x3f);
-  }
-""",
           },
           "org/jcodings/Encoding.java" : {
             "(public static Encoding load\\([^()]*\\) \\{\\s*)[^{}]*(?:\\{[^{}]*\\}[^{}]*)*(\\s*\\})" : "\\1throw new InternalException(ErrorMessages.ERR_ENCODING_CLASS_DEF_NOT_FOUND, name);\\2"
@@ -1833,6 +1796,17 @@ suite = {
       #}
     },
 
+    "TRUFFLE_ATTACH_GRAALVM_SUPPORT" : {
+      "native" : True,
+      "platformDependent" : True,
+      "description" : "Contains a library to provide access for Truffle to JDK internal classes.",
+      "layout" : {
+        "./" : ["dependency:com.oracle.truffle.attach"],
+      },
+      "maven" : False,
+      "graalCompilerSourceEdition": "ignore",
+    },
+
     "TRUFFLE_ATTACH_RESOURCES" : {
       "type" : "dir",
       "platformDependent" : True,
@@ -2042,7 +2016,7 @@ suite = {
 
     "TRUFFLE_TCK_TESTS_LANGUAGE" : {
       "subDir" : "src",
-      "javaCompliance" : "17+",
+      "javaCompliance" : "20+",
       "dependencies" : [
         "com.oracle.truffle.tck.tests.language"
       ],
@@ -2087,17 +2061,6 @@ suite = {
           "tag": ["default", "public"],
       },
       "graalCompilerSourceEdition": "ignore",
-    },
-
-    "TRUFFLE_LIBGRAAL_PROCESSOR" : {
-      "subDir" : "src",
-      "dependencies" : ["com.oracle.truffle.libgraal.processor"],
-      "distDependencies" : [],
-      "description" : "The Truffle libgraal processor is shared across Truffle and the compiler to generate code for the compiler bridge.",
-      "allowsJavadocWarnings": True,
-      "maven": {
-          "tag": ["default", "public"],
-      },
     },
 
     "TRUFFLE_SL" : {
@@ -2232,7 +2195,6 @@ suite = {
        "javaCompliance" : "17+",
        "dependencies" : [
          "com.oracle.truffle.api.test",
-         "com.oracle.truffle.api.benchmark",
          "com.oracle.truffle.api.dsl.test",
          "com.oracle.truffle.api.library.test",
          "com.oracle.truffle.api.instrumentation.test",
@@ -2265,6 +2227,24 @@ suite = {
       "maven" : False,
       "graalCompilerSourceEdition": "ignore",
      },
+
+     "TRUFFLE_MICRO_BENCHMARKS" : {
+       "subDir" : "src",
+       "javaCompliance" : "17+",
+       "dependencies" : [
+         "org.graalvm.truffle.benchmark",
+       ],
+       "distDependencies" : [
+         "mx:JMH_1_21",
+         "TRUFFLE_API",
+         "TRUFFLE_RUNTIME",
+         "TRUFFLE_JCODINGS",
+        ],
+       "testDistribution": True,
+       "maven" : False,
+       "graalCompilerSourceEdition": "ignore",
+     },
+
 
     "TRUFFLE_NFI_TEST": {
        "subDir": "src",

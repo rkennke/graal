@@ -41,13 +41,14 @@
 
 package org.graalvm.wasm;
 
-import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import org.graalvm.options.OptionKey;
 import org.graalvm.options.OptionValues;
 import org.graalvm.wasm.exception.Failure;
 import org.graalvm.wasm.exception.WasmException;
 
-public class WasmContextOptions {
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+
+public final class WasmContextOptions {
     @CompilationFinal private boolean saturatingFloatToInt;
     @CompilationFinal private boolean signExtensionOps;
     @CompilationFinal private boolean multiValue;
@@ -63,8 +64,8 @@ public class WasmContextOptions {
     @CompilationFinal private boolean memoryOverheadMode;
     @CompilationFinal private boolean constantRandomGet;
     @CompilationFinal private boolean directByteBufferMemoryAccess;
+    @CompilationFinal private boolean debugTestMode;
 
-    @CompilationFinal private String debugCompDirectory;
     private final OptionValues optionValues;
 
     WasmContextOptions(OptionValues optionValues) {
@@ -92,7 +93,7 @@ public class WasmContextOptions {
         this.memoryOverheadMode = readBooleanOption(WasmOptions.MemoryOverheadMode);
         this.constantRandomGet = readBooleanOption(WasmOptions.WasiConstantRandomGet);
         this.directByteBufferMemoryAccess = readBooleanOption(WasmOptions.DirectByteBufferMemoryAccess);
-        this.debugCompDirectory = readStringOption(WasmOptions.DebugCompDirectory);
+        this.debugTestMode = readBooleanOption(WasmOptions.DebugTestMode);
     }
 
     private void checkOptionDependencies() {
@@ -105,10 +106,6 @@ public class WasmContextOptions {
     }
 
     private boolean readBooleanOption(OptionKey<Boolean> key) {
-        return key.getValue(optionValues);
-    }
-
-    private String readStringOption(OptionKey<String> key) {
         return key.getValue(optionValues);
     }
 
@@ -172,8 +169,8 @@ public class WasmContextOptions {
         return directByteBufferMemoryAccess;
     }
 
-    public String debugCompDirectory() {
-        return debugCompDirectory;
+    public boolean debugTestMode() {
+        return debugTestMode;
     }
 
     @Override
@@ -184,7 +181,7 @@ public class WasmContextOptions {
         hash = 53 * hash + (this.multiValue ? 1 : 0);
         hash = 53 * hash + (this.bulkMemoryAndRefTypes ? 1 : 0);
         hash = 53 * hash + (this.memory64 ? 1 : 0);
-        hash = 54 * hash + (this.extendedConstExpressions ? 1 : 0);
+        hash = 53 * hash + (this.extendedConstExpressions ? 1 : 0);
         hash = 53 * hash + (this.multiMemory ? 1 : 0);
         hash = 53 * hash + (this.unsafeMemory ? 1 : 0);
         hash = 53 * hash + (this.simd ? 1 : 0);
@@ -192,7 +189,7 @@ public class WasmContextOptions {
         hash = 53 * hash + (this.memoryOverheadMode ? 1 : 0);
         hash = 53 * hash + (this.constantRandomGet ? 1 : 0);
         hash = 53 * hash + (this.directByteBufferMemoryAccess ? 1 : 0);
-        hash = 53 * hash + (this.debugCompDirectory.hashCode());
+        hash = 53 * hash + (this.debugTestMode ? 1 : 0);
         return hash;
     }
 
@@ -201,13 +198,9 @@ public class WasmContextOptions {
         if (this == obj) {
             return true;
         }
-        if (obj == null) {
+        if (!(obj instanceof WasmContextOptions other)) {
             return false;
         }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        final WasmContextOptions other = (WasmContextOptions) obj;
         if (this.saturatingFloatToInt != other.saturatingFloatToInt) {
             return false;
         }
@@ -250,7 +243,7 @@ public class WasmContextOptions {
         if (this.directByteBufferMemoryAccess != other.directByteBufferMemoryAccess) {
             return false;
         }
-        if (!this.debugCompDirectory.equals(other.debugCompDirectory)) {
+        if (this.debugTestMode != other.debugTestMode) {
             return false;
         }
         return true;

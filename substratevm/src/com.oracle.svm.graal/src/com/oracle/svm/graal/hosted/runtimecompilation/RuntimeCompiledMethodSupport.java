@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2023, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import jdk.graal.compiler.nodes.NodeClassMap;
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.word.LocationIdentity;
 
@@ -377,6 +378,7 @@ public class RuntimeCompiledMethodSupport {
      */
     @SuppressWarnings("javadoc")
     public static class RuntimeCompilationGraphEncoder extends GraphEncoder {
+        public static final NodeClassMap RUNTIME_NODE_CLASS_MAP = new NodeClassMap();
 
         private final ImageHeapScanner heapScanner;
         /**
@@ -386,7 +388,7 @@ public class RuntimeCompiledMethodSupport {
         private final Map<ImageHeapConstant, LocationIdentity> locationIdentityCache;
 
         public RuntimeCompilationGraphEncoder(Architecture architecture, ImageHeapScanner heapScanner) {
-            super(architecture);
+            super(architecture, null, RUNTIME_NODE_CLASS_MAP);
             this.heapScanner = heapScanner;
             this.locationIdentityCache = new ConcurrentHashMap<>();
         }
@@ -486,7 +488,8 @@ public class RuntimeCompiledMethodSupport {
         @Override
         protected void run(StructuredGraph graph) {
             for (Node n : graph.getNodes().snapshot()) {
-                VMError.guarantee(!(n instanceof MacroNode), "DeoptTarget Methods do not support Macro Nodes: method %s, node %s", graph.method(), n);
+                VMError.guarantee(!(n instanceof MacroNode macro && macro.canDeoptimizeOrThrow()), "DeoptTarget Methods do not support Macro Nodes that may deopt or throw: method %s, node %s",
+                                graph.method(), n);
 
                 if (n instanceof MacroWithExceptionNode macro) {
                     macro.replaceWithInvoke();

@@ -51,9 +51,8 @@ import org.graalvm.polyglot.SandboxPolicy;
 import org.graalvm.wasm.api.InteropCallAdapterNode;
 import org.graalvm.wasm.api.JsConstants;
 import org.graalvm.wasm.api.WebAssembly;
+import org.graalvm.wasm.debugging.representation.DebugPrimitiveValue;
 import org.graalvm.wasm.exception.WasmJsApiException;
-import org.graalvm.wasm.memory.WasmMemory;
-import org.graalvm.wasm.memory.WasmMemoryLibrary;
 import org.graalvm.wasm.predefined.BuiltinModule;
 
 import com.oracle.truffle.api.CallTarget;
@@ -66,6 +65,7 @@ import com.oracle.truffle.api.TruffleLanguage.Registration;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.ProvidedTags;
 import com.oracle.truffle.api.instrumentation.StandardTags;
+import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
@@ -77,7 +77,6 @@ import com.oracle.truffle.api.source.SourceSection;
                 byteMimeTypes = {WasmLanguage.WASM_MIME_TYPE}, //
                 contextPolicy = TruffleLanguage.ContextPolicy.SHARED, //
                 fileTypeDetectors = WasmFileDetector.class, //
-                interactive = false, //
                 website = "https://www.graalvm.org/webassembly/", //
                 sandbox = SandboxPolicy.CONSTRAINED)
 @ProvidedTags({StandardTags.RootTag.class, StandardTags.RootBodyTag.class, StandardTags.StatementTag.class})
@@ -173,10 +172,10 @@ public final class WasmLanguage extends TruffleLanguage<WasmContext> {
         @Override
         public Object execute(VirtualFrame frame) {
             if (frame.getArguments().length == 0) {
-                final WasmContext context = WasmContext.get(this);
-                WasmInstance instance = context.lookupModuleInstance(module);
+                final WasmStore contextStore = WasmContext.get(this).contextStore();
+                WasmInstance instance = contextStore.lookupModuleInstance(module);
                 if (instance == null) {
-                    instance = context.readInstance(module);
+                    instance = contextStore.readInstance(module);
                 }
                 return instance;
             } else {
@@ -202,6 +201,31 @@ public final class WasmLanguage extends TruffleLanguage<WasmContext> {
         }
     }
 
+    /**
+     * Parses simple expressions required to modify values during debugging.
+     * 
+     * @param request request for parsing
+     */
+    @Override
+    protected ExecutableNode parse(InlineParsingRequest request) throws Exception {
+        final String expression = request.getSource().getCharacters().toString();
+        return new ParsePrimitiveExpressionRootNode(this, expression);
+    }
+
+    private static final class ParsePrimitiveExpressionRootNode extends ExecutableNode {
+        private final String expression;
+
+        private ParsePrimitiveExpressionRootNode(WasmLanguage language, String expression) {
+            super(language);
+            this.expression = expression;
+        }
+
+        @Override
+        public Object execute(VirtualFrame frame) {
+            return new DebugPrimitiveValue(expression);
+        }
+    }
+
     public static WasmModule getParsedModule(CallTarget parseResult) {
         if (parseResult instanceof RootCallTarget rct && rct.getRootNode() instanceof ParsedWasmModuleRootNode moduleRoot) {
             return moduleRoot.getModule();
@@ -223,12 +247,9 @@ public final class WasmLanguage extends TruffleLanguage<WasmContext> {
     @Override
     protected void finalizeContext(WasmContext context) {
         super.finalizeContext(context);
-        for (int i = 0; i < context.memories().count(); ++i) {
-            final WasmMemory memory = context.memories().memory(i);
-            WasmMemoryLibrary.getUncached().close(memory);
-        }
+        context.memoryContext().close();
         try {
-            context.fdManager().close();
+            context.contextStore().fdManager().close();
         } catch (IOException e) {
             throw new RuntimeException("Error while closing WasmFilesManager.");
         }

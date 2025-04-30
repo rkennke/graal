@@ -32,6 +32,7 @@ import com.oracle.svm.core.Uninterruptible;
 import com.oracle.svm.core.heap.GCCause;
 import com.oracle.svm.core.util.BasedOnJDKFile;
 import com.oracle.svm.core.util.TimeUtils;
+import com.oracle.svm.core.util.Timer;
 import com.oracle.svm.core.util.UnsignedUtils;
 
 import jdk.graal.compiler.word.Word;
@@ -47,10 +48,10 @@ import jdk.graal.compiler.word.Word;
 @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+2/src/hotspot/share/gc/shared/adaptiveSizePolicy.hpp")
 @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+7/src/hotspot/share/gc/shared/adaptiveSizePolicy.cpp")
 @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+1/src/hotspot/share/gc/parallel/psAdaptiveSizePolicy.hpp")
-@BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+7/src/hotspot/share/gc/parallel/psAdaptiveSizePolicy.cpp")
+@BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+20/src/hotspot/share/gc/parallel/psAdaptiveSizePolicy.cpp")
 @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+12/src/hotspot/share/gc/parallel/psParallelCompact.cpp#L963-L1180")
 @BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+6/src/hotspot/share/gc/parallel/psScavenge.cpp#L321-L637")
-@BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+1/src/hotspot/share/gc/shared/gc_globals.hpp#L308-L420")
+@BasedOnJDKFile("https://github.com/openjdk/jdk/blob/jdk-25+20/src/hotspot/share/gc/shared/gc_globals.hpp#L303-L415")
 class AdaptiveCollectionPolicy extends AbstractCollectionPolicy {
 
     /*
@@ -189,7 +190,8 @@ class AdaptiveCollectionPolicy extends AbstractCollectionPolicy {
             return false;
         }
 
-        if (minorCountSinceMajorCollection * avgMinorPause.getAverage() >= CONSECUTIVE_MINOR_TO_MAJOR_COLLECTION_PAUSE_TIME_RATIO * avgMajorPause.getPaddedAverage()) {
+        if (!SerialGCOptions.useCompactingOldGen() &&
+                        minorCountSinceMajorCollection * avgMinorPause.getAverage() >= CONSECUTIVE_MINOR_TO_MAJOR_COLLECTION_PAUSE_TIME_RATIO * avgMajorPause.getPaddedAverage()) {
             /*
              * When we do many incremental collections in a row because they reclaim sufficient
              * space, still trigger a complete collection when reaching a cumulative pause time
@@ -393,21 +395,21 @@ class AdaptiveCollectionPolicy extends AbstractCollectionPolicy {
     }
 
     private double secondsSinceMajorGc() { // time_since_major_gc
-        return TimeUtils.nanosToSecondsDouble(System.nanoTime() - majorTimer.getOpenedTime());
+        return TimeUtils.nanosToSecondsDouble(System.nanoTime() - majorTimer.startedNanos());
     }
 
     @Override
     public void onCollectionBegin(boolean completeCollection, long requestingNanoTime) { // {major,minor}_collection_begin
         Timer timer = completeCollection ? majorTimer : minorTimer;
-        timer.closeAt(requestingNanoTime);
+        timer.stopAt(requestingNanoTime);
         if (completeCollection) {
-            latestMajorMutatorIntervalNanos = timer.getMeasuredNanos();
+            latestMajorMutatorIntervalNanos = timer.totalNanos();
         } else {
-            latestMinorMutatorIntervalNanos = timer.getMeasuredNanos();
+            latestMinorMutatorIntervalNanos = timer.totalNanos();
         }
 
         timer.reset();
-        timer.open(); // measure collection pause
+        timer.start(); // measure collection pause
 
         super.onCollectionBegin(completeCollection, requestingNanoTime);
     }
@@ -415,17 +417,17 @@ class AdaptiveCollectionPolicy extends AbstractCollectionPolicy {
     @Override
     public void onCollectionEnd(boolean completeCollection, GCCause cause) { // {major,minor}_collection_end
         Timer timer = completeCollection ? majorTimer : minorTimer;
-        timer.close();
+        timer.stop();
 
         if (completeCollection) {
             updateCollectionEndAverages(avgMajorGcCost, avgMajorPause, majorCostEstimator, avgMajorIntervalSeconds,
-                            cause, latestMajorMutatorIntervalNanos, timer.getMeasuredNanos(), promoSize);
+                            cause, latestMajorMutatorIntervalNanos, timer.totalNanos(), promoSize);
             majorCount++;
             minorCountSinceMajorCollection = 0;
 
         } else {
             updateCollectionEndAverages(avgMinorGcCost, avgMinorPause, minorCostEstimator, null,
-                            cause, latestMinorMutatorIntervalNanos, timer.getMeasuredNanos(), edenSize);
+                            cause, latestMinorMutatorIntervalNanos, timer.totalNanos(), edenSize);
             minorCount++;
             minorCountSinceMajorCollection++;
 
@@ -435,7 +437,7 @@ class AdaptiveCollectionPolicy extends AbstractCollectionPolicy {
         }
 
         timer.reset();
-        timer.open();
+        timer.start();
 
         GCAccounting accounting = GCImpl.getAccounting();
         UnsignedWord oldLive = accounting.getOldGenerationAfterChunkBytes();

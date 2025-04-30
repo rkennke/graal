@@ -68,11 +68,11 @@ public final class ClassForNameSupport implements MultiLayeredImageSingleton, Un
     /**
      * The map used to collect registered classes.
      */
-    private final EconomicMap<String, ConditionalRuntimeValue<Object>> knownClasses = ImageHeapMap.create();
+    private final EconomicMap<String, ConditionalRuntimeValue<Object>> knownClasses = ImageHeapMap.createNonLayeredMap();
     /**
      * The map used to collect unsafe allocated classes.
      */
-    private final EconomicMap<Class<?>, RuntimeConditionSet> unsafeInstantiatedClasses = ImageHeapMap.create();
+    private final EconomicMap<Class<?>, RuntimeConditionSet> unsafeInstantiatedClasses = ImageHeapMap.createNonLayeredMap();
 
     private static final Object NEGATIVE_QUERY = new Object();
 
@@ -196,8 +196,13 @@ public final class ClassForNameSupport implements MultiLayeredImageSingleton, Un
         }
         Object result = null;
         for (var singleton : layeredSingletons()) {
-            result = singleton.forName0(className, classLoader);
-            if (result != null) {
+            Object newResult = singleton.forName0(className, classLoader);
+            result = newResult != null ? newResult : result;
+            /*
+             * The class might have been registered in a shared layer but was not yet available. In
+             * that case, the extension layers need to be checked too.
+             */
+            if (result != null && result != NEGATIVE_QUERY) {
                 break;
             }
         }

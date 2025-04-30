@@ -44,6 +44,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.wasm.debugging.data.DebugFunction;
@@ -54,7 +55,6 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.TruffleObject;
-import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.Source;
 
 /**
@@ -73,6 +73,8 @@ public final class WasmModule extends SymbolTable implements TruffleObject {
     @CompilationFinal(dimensions = 1) private CodeEntry[] codeEntries;
     @CompilationFinal private boolean isParsed;
     private volatile boolean hasBeenInstantiated;
+
+    private final ReentrantLock lock = new ReentrantLock();
 
     @CompilationFinal private int debugInfoOffset;
     @CompilationFinal private EconomicMap<Integer, DebugFunction> debugFunctions;
@@ -136,6 +138,13 @@ public final class WasmModule extends SymbolTable implements TruffleObject {
 
     public void setHasBeenInstantiated() {
         this.hasBeenInstantiated = true;
+    }
+
+    /**
+     * Private lock used for instantiation and linking.
+     */
+    public ReentrantLock getLock() {
+        return lock;
     }
 
     public ModuleLimits limits() {
@@ -253,11 +262,10 @@ public final class WasmModule extends SymbolTable implements TruffleObject {
     }
 
     @TruffleBoundary
-    public EconomicMap<Integer, DebugFunction> debugFunctions(Node node) {
+    public EconomicMap<Integer, DebugFunction> debugFunctions() {
         // lazily load debug information if needed.
         if (debugFunctions == null && hasDebugInfo()) {
-            WasmContext context = WasmContext.get(node);
-            DebugTranslator translator = new DebugTranslator(customData, context.getContextOptions().debugCompDirectory(), context.environment());
+            DebugTranslator translator = new DebugTranslator(customData);
             debugFunctions = translator.readCompilationUnits(customData, debugInfoOffset);
         }
         return debugFunctions;

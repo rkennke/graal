@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,8 +34,6 @@ import static jdk.graal.compiler.java.BytecodeParserOptions.InlineDuringParsing;
 
 import java.io.PrintStream;
 
-import jdk.graal.compiler.core.common.LibGraalSupport;
-import jdk.graal.compiler.options.Option;
 import org.graalvm.collections.EconomicMap;
 
 import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
@@ -44,6 +42,7 @@ import jdk.graal.compiler.core.CompilationPrinter;
 import jdk.graal.compiler.core.CompilationWatchDog;
 import jdk.graal.compiler.core.CompilationWrapper;
 import jdk.graal.compiler.core.common.CompilationIdentifier;
+import jdk.graal.compiler.core.common.LibGraalSupport;
 import jdk.graal.compiler.debug.Assertions;
 import jdk.graal.compiler.debug.CounterKey;
 import jdk.graal.compiler.debug.DebugCloseable;
@@ -59,6 +58,7 @@ import jdk.graal.compiler.debug.TimerKey;
 import jdk.graal.compiler.nodes.StructuredGraph;
 import jdk.graal.compiler.nodes.spi.StableProfileProvider;
 import jdk.graal.compiler.nodes.spi.StableProfileProvider.TypeFilter;
+import jdk.graal.compiler.options.Option;
 import jdk.graal.compiler.options.OptionKey;
 import jdk.graal.compiler.options.OptionValues;
 import jdk.graal.compiler.options.OptionsParser;
@@ -77,17 +77,18 @@ import jdk.vm.ci.runtime.JVMCICompiler;
 
 public class CompilationTask implements CompilationWatchDog.EventHandler {
 
-    static class Options {
-        @Option(help = "Options which are enabled based on the method being compiled. " +
-                        "The basic syntax is a MethodFilter option specification followed by a list of options to be set for that compilation. " +
-                        "\"MethodFilter:\" is used to distinguish this from normal usage of MethodFilter as option." +
-                        "This can be repeated multiple times with each MethodFilter option separating the groups. " +
-                        "For example:" +
-                        "    -D" + HotSpotGraalOptionValues.GRAAL_OPTION_PROPERTY_PREFIX +
-                        ".PerMethodOptions=MethodFilter:String.indexOf SpeculativeGuardMovement=false MethodFilter:Integer.* SpeculativeGuardMovement=false" +
-                        " disables SpeculativeGuardMovement for compiles of String.indexOf and all methods in Integer. " +
-                        "If the value starts with a non-letter character, that " +
-                        "character is used as the separator between options instead of a space.")//
+    public static class Options {
+        @Option(help = """
+                        Options which are enabled based on the method being compiled.
+                        The basic syntax is a MethodFilter option specification followed by a list of options to be set for that compilation.
+                        "MethodFilter:" is used to distinguish this from normal usage of MethodFilter as option.
+                        This can be repeated multiple times with each MethodFilter option separating the groups.
+                        For example:
+                        "    -D""" + HotSpotGraalOptionValues.GRAAL_OPTION_PROPERTY_PREFIX + """
+                        PerMethodOptions=MethodFilter:String.indexOf SpeculativeGuardMovement=false MethodFilter:Integer.* SpeculativeGuardMovement=false
+                        disables SpeculativeGuardMovement for compiles of String.indexOf and all methods in Integer.
+                        If the value starts with a non-letter character, that
+                        character is used as the separator between options instead of a space.""")//
         public static final OptionKey<String> PerMethodOptions = new OptionKey<>(null);
     }
 
@@ -157,8 +158,7 @@ public class CompilationTask implements CompilationWatchDog.EventHandler {
 
         @Override
         protected HotSpotCompilationRequestResult handleException(Throwable t) {
-            if (t instanceof BailoutException) {
-                BailoutException bailout = (BailoutException) t;
+            if (t instanceof BailoutException bailout) {
                 /*
                  * Handling of permanent bailouts: Permanent bailouts that can happen for example
                  * due to unsupported unstructured control flow in the bytecodes of a method must
@@ -190,8 +190,7 @@ public class CompilationTask implements CompilationWatchDog.EventHandler {
 
         @Override
         protected ExceptionAction lookupAction(OptionValues values, Throwable cause) {
-            if (cause instanceof BailoutException) {
-                BailoutException bailout = (BailoutException) cause;
+            if (cause instanceof BailoutException bailout) {
                 if (bailout.isPermanent()) {
                     // Respect current action if it has been explicitly set.
                     if (!CompilationBailoutAsFailure.hasBeenSet(values)) {
@@ -349,7 +348,7 @@ public class CompilationTask implements CompilationWatchDog.EventHandler {
         // Set any options for this compile.
         String perMethodOptions = Options.PerMethodOptions.getValue(originalOptions);
         if (perMethodOptions != null) {
-            EconomicMap<OptionKey<?>, Object> values;
+            EconomicMap<OptionKey<?>, Object> values = null;
             try {
                 EconomicMap<String, String> optionSettings = null;
                 for (String option : OptionsParser.splitOptions(perMethodOptions)) {
@@ -365,15 +364,15 @@ public class CompilationTask implements CompilationWatchDog.EventHandler {
                         }
                     } else if (optionSettings != null) {
                         OptionsParser.parseOptionSettingTo(option, optionSettings);
-                    } else {
-                        throw new IllegalArgumentException(Options.PerMethodOptions.getName() + " must start with \"MethodFilter:\" specification");
                     }
                 }
-                if (optionSettings.isEmpty()) {
-                    throw new IllegalArgumentException("No options specified for MethodFilter:");
+                if (optionSettings != null) {
+                    if (optionSettings.isEmpty()) {
+                        throw new IllegalArgumentException("No options specified for MethodFilter:");
+                    }
+                    values = EconomicMap.create();
+                    OptionsParser.parseOptions(optionSettings, values, OptionsParser.getOptionsLoader());
                 }
-                values = EconomicMap.create();
-                OptionsParser.parseOptions(optionSettings, values, OptionsParser.getOptionsLoader());
             } catch (Exception e) {
                 values = null;
                 TTY.println(e.toString());
@@ -483,7 +482,7 @@ public class CompilationTask implements CompilationWatchDog.EventHandler {
         }
     }
 
-    @SuppressWarnings({"try", "unchecked"})
+    @SuppressWarnings({"try"})
     public HotSpotCompilationRequestResult runCompilation(DebugContext debug) {
         try (DebugCloseable a = CompilationTime.start(debug)) {
             HotSpotCompilationRequestResult result = runCompilation(debug, new HotSpotCompilationWrapper());

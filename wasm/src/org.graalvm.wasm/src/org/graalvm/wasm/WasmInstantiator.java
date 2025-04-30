@@ -51,7 +51,9 @@ import org.graalvm.wasm.constants.BytecodeBitEncoding;
 import org.graalvm.wasm.constants.SegmentMode;
 import org.graalvm.wasm.memory.WasmMemory;
 import org.graalvm.wasm.memory.WasmMemoryFactory;
+import org.graalvm.wasm.nodes.WasmCallNode;
 import org.graalvm.wasm.nodes.WasmCallStubNode;
+import org.graalvm.wasm.nodes.WasmDirectCallNode;
 import org.graalvm.wasm.nodes.WasmFixedMemoryImplFunctionNode;
 import org.graalvm.wasm.nodes.WasmFunctionRootNode;
 import org.graalvm.wasm.nodes.WasmIndirectCallNode;
@@ -63,7 +65,7 @@ import org.graalvm.wasm.parser.ir.CodeEntry;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.TruffleContext;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.nodes.Node;
@@ -80,10 +82,10 @@ public class WasmInstantiator {
     }
 
     @TruffleBoundary
-    public WasmInstance createInstance(WasmContext context, WasmModule module, TruffleContext truffleContext) {
-        WasmInstance instance = new WasmInstance(context, module, truffleContext);
+    public WasmInstance createInstance(WasmStore store, WasmModule module) {
+        WasmInstance instance = new WasmInstance(store, module);
         instance.createLinkActions();
-        instantiateCodeEntries(context, instance);
+        instantiateCodeEntries(store, instance);
         return instance;
     }
 
@@ -93,15 +95,15 @@ public class WasmInstantiator {
         for (int i = 0; i < module.numFunctions(); i++) {
             final WasmFunction function = module.function(i);
             if (function.isImported()) {
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolveFunctionImport(context, instance, function, imports);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolveFunctionImport(store, instance, function, imports);
                 });
             }
             final String exportName = module.exportedFunctionName(i);
             if (exportName != null) {
                 final int functionIndex = i;
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolveFunctionExport(instance.module(), functionIndex, exportName);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolveFunctionExport(instance.module(), functionIndex, exportName);
                 });
             }
         }
@@ -113,27 +115,27 @@ public class WasmInstantiator {
             final byte globalMutability = module.globalMutability(globalIndex);
             if (importedGlobals.containsKey(globalIndex)) {
                 final ImportDescriptor globalDescriptor = importedGlobals.get(globalIndex);
-                linkActions.add((context, instance, imports) -> {
+                linkActions.add((context, store, instance, imports) -> {
                     instance.setGlobalAddress(globalIndex, SymbolTable.UNINITIALIZED_ADDRESS);
                 });
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolveGlobalImport(context, instance, globalDescriptor, globalIndex, globalValueType, globalMutability, imports);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolveGlobalImport(store, instance, globalDescriptor, globalIndex, globalValueType, globalMutability, imports);
                 });
             } else {
                 final boolean initialized = module.globalInitialized(globalIndex);
                 final byte[] initBytecode = module.globalInitializerBytecode(globalIndex);
                 final Object initialValue = module.globalInitialValue(globalIndex);
-                linkActions.add((context, instance, imports) -> {
-                    final GlobalRegistry registry = context.globals();
+                linkActions.add((context, store, instance, imports) -> {
+                    final GlobalRegistry registry = store.globals();
                     final int address = registry.allocateGlobal();
                     instance.setGlobalAddress(globalIndex, address);
                 });
-                linkActions.add((context, instance, imports) -> {
+                linkActions.add((context, store, instance, imports) -> {
                     if (initialized) {
-                        context.globals().store(globalValueType, instance.globalAddress(globalIndex), initialValue);
-                        context.linker().resolveGlobalInitialization(instance, globalIndex);
+                        store.globals().store(globalValueType, instance.globalAddress(globalIndex), initialValue);
+                        store.linker().resolveGlobalInitialization(instance, globalIndex);
                     } else {
-                        context.linker().resolveGlobalInitialization(context, instance, globalIndex, initBytecode);
+                        store.linker().resolveGlobalInitialization(store, instance, globalIndex, initBytecode);
                     }
                 });
             }
@@ -142,8 +144,8 @@ public class WasmInstantiator {
         while (exportedGlobals.advance()) {
             final String globalName = exportedGlobals.getKey();
             final int globalIndex = exportedGlobals.getValue();
-            linkActions.add((context, instance, imports) -> {
-                context.linker().resolveGlobalExport(instance.module(), globalName, globalIndex);
+            linkActions.add((context, store, instance, imports) -> {
+                store.linker().resolveGlobalExport(instance.module(), globalName, globalIndex);
             });
         }
 
@@ -154,19 +156,19 @@ public class WasmInstantiator {
             final byte tableElemType = module.tableElementType(tableIndex);
             final ImportDescriptor tableDescriptor = module.importedTable(tableIndex);
             if (tableDescriptor != null) {
-                linkActions.add((context, instance, imports) -> {
+                linkActions.add((context, store, instance, imports) -> {
                     instance.setTableAddress(tableIndex, SymbolTable.UNINITIALIZED_ADDRESS);
                 });
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolveTableImport(context, instance, tableDescriptor, tableIndex, tableMinSize, tableMaxSize, tableElemType, imports);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolveTableImport(store, instance, tableDescriptor, tableIndex, tableMinSize, tableMaxSize, tableElemType, imports);
                 });
             } else {
-                linkActions.add((context, instance, imports) -> {
+                linkActions.add((context, store, instance, imports) -> {
                     final ModuleLimits limits = instance.module().limits();
                     final int maxAllowedSize = WasmMath.minUnsigned(tableMaxSize, limits.tableInstanceSizeLimit());
                     limits.checkTableInstanceSize(tableMinSize);
                     final WasmTable wasmTable = new WasmTable(tableMinSize, tableMaxSize, maxAllowedSize, tableElemType);
-                    final int address = context.tables().register(wasmTable);
+                    final int address = store.tables().register(wasmTable);
                     instance.setTableAddress(tableIndex, address);
                 });
             }
@@ -175,8 +177,8 @@ public class WasmInstantiator {
         while (exportedTables.advance()) {
             final String tableName = exportedTables.getKey();
             final int tableIndex = exportedTables.getValue();
-            linkActions.add((context, instance, imports) -> {
-                context.linker().resolveTableExport(instance.module(), tableIndex, tableName);
+            linkActions.add((context, store, instance, imports) -> {
+                store.linker().resolveTableExport(instance.module(), tableIndex, tableName);
             });
         }
 
@@ -188,17 +190,17 @@ public class WasmInstantiator {
             final boolean memoryShared = module.memoryIsShared(memoryIndex);
             final ImportDescriptor memoryDescriptor = module.importedMemory(memoryIndex);
             if (memoryDescriptor != null) {
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolveMemoryImport(context, instance, memoryDescriptor, memoryIndex, memoryMinSize, memoryMaxSize, memoryIndexType64, memoryShared, imports);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolveMemoryImport(store, instance, memoryDescriptor, memoryIndex, memoryMinSize, memoryMaxSize, memoryIndexType64, memoryShared, imports);
                 });
             } else {
-                linkActions.add((context, instance, imports) -> {
+                linkActions.add((context, store, instance, imports) -> {
                     final ModuleLimits limits = instance.module().limits();
                     limits.checkMemoryInstanceSize(memoryMinSize, memoryIndexType64);
                     final WasmMemory wasmMemory = WasmMemoryFactory.createMemory(memoryMinSize, memoryMaxSize, memoryIndexType64, memoryShared,
-                                    context.getContextOptions().useUnsafeMemory(), context.getContextOptions().directByteBufferMemoryAccess());
-                    final int address = context.memories().register(wasmMemory);
-                    final WasmMemory allocatedMemory = context.memories().memory(address);
+                                    context.getContextOptions().useUnsafeMemory(), context.getContextOptions().directByteBufferMemoryAccess(), context);
+                    final int address = store.memories().register(wasmMemory);
+                    final WasmMemory allocatedMemory = store.memories().memory(address);
                     instance.setMemory(memoryIndex, allocatedMemory);
                 });
             }
@@ -207,8 +209,8 @@ public class WasmInstantiator {
         while (exportedMemories.advance()) {
             final String memoryName = exportedMemories.getKey();
             final int memoryIndex = exportedMemories.getValue();
-            linkActions.add((context, instance, imports) -> {
-                context.linker().resolveMemoryExport(instance, memoryIndex, memoryName);
+            linkActions.add((context, store, instance, imports) -> {
+                store.linker().resolveMemoryExport(instance, memoryIndex, memoryName);
             });
         }
 
@@ -303,14 +305,14 @@ public class WasmInstantiator {
                 }
 
                 final int dataBytecodeOffset = effectiveOffset;
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolveDataSegment(context, instance, dataIndex, memoryIndex, dataOffsetAddress, dataOffsetBytecode, dataLength,
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolveDataSegment(store, instance, dataIndex, memoryIndex, dataOffsetAddress, dataOffsetBytecode, dataLength,
                                     dataBytecodeOffset, instance.droppedDataInstanceOffset());
                 });
             } else {
                 final int dataBytecodeOffset = effectiveOffset;
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolvePassiveDataSegment(context, instance, dataIndex, dataBytecodeOffset);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolvePassiveDataSegment(store, instance, dataIndex, dataBytecodeOffset);
                 });
             }
         }
@@ -412,13 +414,13 @@ public class WasmInstantiator {
                         throw CompilerDirectives.shouldNotReachHere();
                 }
                 final int bytecodeOffset = effectiveOffset;
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolveElemSegment(context, instance, tableIndex, elemIndex, offsetAddress, offsetBytecode, bytecodeOffset, elemCount);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolveElemSegment(store, instance, tableIndex, elemIndex, offsetAddress, offsetBytecode, bytecodeOffset, elemCount);
                 });
             } else {
                 final int bytecodeOffset = effectiveOffset;
-                linkActions.add((context, instance, imports) -> {
-                    context.linker().resolvePassiveElemSegment(context, instance, elemIndex, bytecodeOffset, elemCount);
+                linkActions.add((context, store, instance, imports) -> {
+                    store.linker().resolvePassiveElemSegment(store, instance, elemIndex, bytecodeOffset, elemCount);
                 });
             }
         }
@@ -426,35 +428,66 @@ public class WasmInstantiator {
         return linkActions;
     }
 
-    private void instantiateCodeEntries(WasmContext context, WasmInstance instance) {
+    private void instantiateCodeEntries(WasmStore store, WasmInstance instance) {
         final WasmModule module = instance.module();
-        // If code entries have already been instantiated, we don't need to reread them.
-        if (context.language().isMultiContext() && module.hasBeenInstantiated()) {
-            for (int functionIndex = 0; functionIndex != module.numFunctions(); ++functionIndex) {
-                WasmFunction function = module.symbolTable().function(functionIndex);
-                CallTarget target = function.target();
-                if (target != null) {
-                    instance.setTarget(functionIndex, target);
-                    context.linker().resolveCodeEntry(module, functionIndex);
-                }
-            }
+        final boolean multiContext = language.isMultiContext();
+        if (multiContext && module.hasBeenInstantiated()) {
+            // If the module has already been instantiated and the call targets are shared,
+            // there's no need to read and instantiate the code entries again.
+            // We only need to initialize the code entry call targets in the new instance.
+            resolveInstantiatedCodeEntries(store, instance, module);
             return;
         }
-        CodeEntry[] codeEntries = module.codeEntries();
-        if (codeEntries == null) {
-            // Reread code sections if module is instantiated multiple times
-            BytecodeParser.readCodeEntries(module);
-            codeEntries = module.codeEntries();
+        // If module instantiation were to happen concurrently, one thread might have already
+        // finished instantiating and started executing while the other is still instantiating.
+        // So we need to ensure that instantiation is synchronized or performed atomically,
+        // and does not overwrite already instantiated (and potentially executed) code state.
+        var lock = module.getLock();
+        lock.lock();
+        try {
+            if (multiContext && module.hasBeenInstantiated()) {
+                resolveInstantiatedCodeEntries(store, instance, module);
+                return;
+            }
+
+            CodeEntry[] codeEntries = module.codeEntries();
+            if (codeEntries == null) {
+                // Reread the code section if the module is instantiated multiple times
+                codeEntries = BytecodeParser.readCodeEntries(module);
+            } else {
+                // Remove code entries from module to reduce memory footprint at runtime
+                module.setCodeEntries(null);
+            }
+            for (int entry = 0; entry != codeEntries.length; ++entry) {
+                CodeEntry codeEntry = codeEntries[entry];
+                var callTarget = instantiateCodeEntry(store, module, instance, codeEntry);
+                instance.setTarget(codeEntry.functionIndex(), callTarget);
+            }
+            // Now that the call targets of all the code entries are set, we can resolve all local
+            // direct call sites. Call sites that require linking do not need to be resolved.
+            for (int entry = 0; entry != codeEntries.length; ++entry) {
+                CodeEntry codeEntry = codeEntries[entry];
+                resolveCallNodes(instance, instance.target(codeEntry.functionIndex()));
+            }
+            module.setHasBeenInstantiated();
+        } finally {
+            lock.unlock();
         }
-        for (int entry = 0; entry != codeEntries.length; ++entry) {
-            CodeEntry codeEntry = codeEntries[entry];
-            var callTarget = instantiateCodeEntry(context, module, instance, codeEntry);
-            instance.setTarget(codeEntry.functionIndex(), callTarget);
-            context.linker().resolveCodeEntry(module, codeEntry.functionIndex());
+    }
+
+    /**
+     * Resolves the call targets of already instantiated code entries in a new instance.
+     */
+    private static void resolveInstantiatedCodeEntries(WasmStore store, WasmInstance instance, WasmModule module) {
+        assert store.language().isMultiContext() && module.hasBeenInstantiated();
+        for (int functionIndex = 0; functionIndex != module.numFunctions(); ++functionIndex) {
+            WasmFunction function = module.symbolTable().function(functionIndex);
+            CallTarget target = function.target();
+            // Not all functions have code entries, only those with a non-null call target.
+            if (target != null) {
+                instance.setTarget(functionIndex, target);
+            }
         }
-        // Remove code entries from module to reduce memory footprint at runtime
-        module.setCodeEntries(null);
-        module.setHasBeenInstantiated();
     }
 
     private static FrameDescriptor createFrameDescriptor(byte[] localTypes, int maxStackSize) {
@@ -463,26 +496,17 @@ public class WasmInstantiator {
         return builder.build();
     }
 
-    private CallTarget instantiateCodeEntry(WasmContext context, WasmModule module, WasmInstance instance, CodeEntry codeEntry) {
+    private CallTarget instantiateCodeEntry(WasmStore store, WasmModule module, WasmInstance instance, CodeEntry codeEntry) {
         final int functionIndex = codeEntry.functionIndex();
         final WasmFunction function = module.symbolTable().function(functionIndex);
         var cachedTarget = function.target();
         if (cachedTarget != null) {
-            assert context.language().isMultiContext();
+            assert store.language().isMultiContext();
             return cachedTarget;
         }
-        final WasmCodeEntry wasmCodeEntry = new WasmCodeEntry(function, module.bytecode(), codeEntry.localTypes(), codeEntry.resultTypes(), codeEntry.usesMemoryZero());
-        final FrameDescriptor frameDescriptor = createFrameDescriptor(codeEntry.localTypes(), codeEntry.maxStackSize());
-        final Node[] callNodes = setupCallNodes(module, instance, codeEntry);
-        final WasmFixedMemoryImplFunctionNode functionNode = WasmFixedMemoryImplFunctionNode.create(module, wasmCodeEntry, codeEntry.bytecodeStartOffset(), codeEntry.bytecodeEndOffset(), callNodes);
-        final WasmFunctionRootNode rootNode;
-        if (context.getContextOptions().memoryOverheadMode()) {
-            rootNode = new WasmMemoryOverheadModeFunctionRootNode(language, frameDescriptor, module, functionNode, wasmCodeEntry);
-        } else {
-            rootNode = new WasmFunctionRootNode(language, frameDescriptor, module, functionNode, wasmCodeEntry);
-        }
+        final WasmFunctionRootNode rootNode = instantiateCodeEntryRootNode(store, module, codeEntry, function);
         var callTarget = rootNode.getCallTarget();
-        if (context.language().isMultiContext()) {
+        if (store.language().isMultiContext()) {
             function.setTarget(callTarget);
         } else {
             rootNode.setBoundModuleInstance(instance);
@@ -490,36 +514,58 @@ public class WasmInstantiator {
         return callTarget;
     }
 
-    private static Node[] setupCallNodes(WasmModule module, WasmInstance instance, CodeEntry entry) {
+    private WasmFunctionRootNode instantiateCodeEntryRootNode(WasmStore store, WasmModule module, CodeEntry codeEntry, WasmFunction function) {
+        final WasmCodeEntry wasmCodeEntry = new WasmCodeEntry(function, module.bytecode(), codeEntry.localTypes(), codeEntry.resultTypes(), codeEntry.usesMemoryZero());
+        final FrameDescriptor frameDescriptor = createFrameDescriptor(codeEntry.localTypes(), codeEntry.maxStackSize());
+        final Node[] callNodes = setupCallNodes(module, codeEntry);
+        final WasmFixedMemoryImplFunctionNode functionNode = WasmFixedMemoryImplFunctionNode.create(module, wasmCodeEntry, codeEntry.bytecodeStartOffset(), codeEntry.bytecodeEndOffset(), callNodes);
+        final WasmFunctionRootNode rootNode;
+        if (store.getContextOptions().memoryOverheadMode()) {
+            rootNode = new WasmMemoryOverheadModeFunctionRootNode(language, frameDescriptor, module, functionNode, wasmCodeEntry);
+        } else {
+            rootNode = new WasmFunctionRootNode(language, frameDescriptor, module, functionNode, wasmCodeEntry);
+        }
+        return rootNode;
+    }
+
+    private static Node[] setupCallNodes(WasmModule module, CodeEntry entry) {
         List<CallNode> childNodeList = entry.callNodes();
         Node[] callNodes = new Node[childNodeList.size()];
         int childIndex = 0;
         for (CallNode callNode : childNodeList) {
-            Node child;
+            final WasmCallNode child;
             final int bytecodeIndex = callNode.getBytecodeOffset();
             if (callNode.isIndirectCall()) {
                 child = WasmIndirectCallNode.create(bytecodeIndex);
             } else {
-                // We deliberately do not create the call node during instantiation.
-                //
-                // If the call target is imported from another module,
-                // then that other module might not have been parsed yet.
-                // Therefore, the call node will be created lazily during linking,
-                // after the call target from the other module exists.
-
                 final WasmFunction resolvedFunction = module.function(callNode.getFunctionIndex());
                 if (resolvedFunction.isImported()) {
+                    // The call target is resolved during linking and then passed by the call site.
+                    // No link actions required.
                     child = WasmIndirectCallNode.create(bytecodeIndex);
                 } else {
-                    child = new WasmCallStubNode(resolvedFunction);
+                    // Will be replaced with a direct call node after all the module's code entries
+                    // have been instantiated and their call targets are available. No link actions
+                    // required since the call target resolution happens already before linking.
+                    child = new WasmCallStubNode(bytecodeIndex, resolvedFunction);
                 }
-                final int stubIndex = childIndex;
-                instance.addLinkAction((ctx, inst, imports) -> {
-                    ctx.linker().resolveCallsite(inst, callNodes, entry.bytecodeStartOffset(), stubIndex, bytecodeIndex, resolvedFunction);
-                });
             }
             callNodes[childIndex++] = child;
         }
         return callNodes;
+    }
+
+    private static void resolveCallNodes(WasmInstance instance, Node[] callNodes) {
+        for (int i = 0; i < callNodes.length; i++) {
+            if (callNodes[i] instanceof WasmCallStubNode callStubNode) {
+                callNodes[i] = WasmDirectCallNode.create(instance.target(callStubNode.function().index()), callStubNode.getBytecodeOffset());
+            }
+        }
+    }
+
+    private static void resolveCallNodes(WasmInstance instance, CallTarget target) {
+        if (((RootCallTarget) target).getRootNode() instanceof WasmFunctionRootNode rootNode) {
+            resolveCallNodes(instance, rootNode.getCallNodes());
+        }
     }
 }

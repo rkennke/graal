@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,8 @@
  * questions.
  */
 package com.oracle.svm.core.thread;
+
+import static com.oracle.svm.core.Uninterruptible.CALLED_FROM_UNINTERRUPTIBLE_CODE;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.security.AccessControlContext;
@@ -220,8 +222,9 @@ public final class JavaThreads {
         return Target_java_lang_ThreadGroup.class.cast(threadGroup);
     }
 
+    @Uninterruptible(reason = CALLED_FROM_UNINTERRUPTIBLE_CODE, mayBeInlined = true)
     @SuppressFBWarnings(value = "BC", justification = "Cast for @TargetClass")
-    private static Target_java_lang_VirtualThread toVirtualTarget(Thread thread) {
+    public static Target_java_lang_VirtualThread toVirtualTarget(Thread thread) {
         return Target_java_lang_VirtualThread.class.cast(thread);
     }
 
@@ -439,7 +442,11 @@ public final class JavaThreads {
     public static long getCurrentThreadId() {
         long id = currentVThreadId.get();
         if (GraalDirectives.inIntrinsic()) {
-            ReplacementsUtil.dynamicAssert(id != 0 && id == getThreadId(Thread.currentThread()), "ids must match");
+            // The condition may throw so we must manually wrap the assert in this if, otherwise the
+            // compiler is not allowed to remove the evaluation
+            if (ReplacementsUtil.REPLACEMENTS_ASSERTIONS_ENABLED) {
+                ReplacementsUtil.dynamicAssert(id != 0 && id == getThreadId(Thread.currentThread()), "ids must match");
+            }
         } else {
             assert id != 0 && id == getThreadId(Thread.currentThread());
         }

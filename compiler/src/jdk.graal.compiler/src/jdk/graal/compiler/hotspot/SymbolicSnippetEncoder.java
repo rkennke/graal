@@ -118,6 +118,7 @@ import jdk.vm.ci.hotspot.HotSpotResolvedJavaField;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaMethod;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaType;
 import jdk.vm.ci.hotspot.HotSpotSignature;
+import jdk.vm.ci.hotspot.HotSpotSpeculationLog;
 import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.ConstantReflectionProvider;
 import jdk.vm.ci.meta.DeoptimizationAction;
@@ -512,7 +513,7 @@ public class SymbolicSnippetEncoder {
     }
 
     private synchronized EncodedSnippets encodeSnippets(DebugContext debug, EconomicMap<SnippetKey, StructuredGraph> preparedSnippetGraphs) {
-        GraphEncoder encoder = new GraphEncoder(HotSpotJVMCIRuntime.runtime().getHostJVMCIBackend().getTarget().arch, debug);
+        GraphEncoder encoder = new GraphEncoder(HotSpotJVMCIRuntime.runtime().getHostJVMCIBackend().getTarget().arch, debug, null);
         for (StructuredGraph graph : preparedSnippetGraphs.getValues()) {
             graph.resetDebug(debug);
             assert verifySingle(debug, graph);
@@ -536,6 +537,7 @@ public class SymbolicSnippetEncoder {
         lookupSnippetType(NamedLocationIdentity.class);
         lookupSnippetType(SnippetTemplate.EagerSnippetInfo.class);
         lookupSnippetType(ForeignCallStub.class);
+        lookupSnippetType(HotSpotSpeculationLog.HotSpotSpeculation.class);
 
         registerAbstractForeignCallStubInfo();
 
@@ -547,6 +549,7 @@ public class SymbolicSnippetEncoder {
             debug.log("snippetObjects[%d] = %s -> %s", i, o != null ? o.getClass().getSimpleName() : null, o);
             snippetObjects[i] = o;
         }
+
         debug.log("Encoded %d snippet preparedSnippetGraphs using %d bytes with %d objects", graphDatas.size(), snippetEncoding.length, snippetObjects.length);
         return new EncodedSnippets(snippetEncoding, snippetObjects, encoder.getNodeClasses(), graphDatas, snippetTypes);
     }
@@ -814,8 +817,7 @@ public class SymbolicSnippetEncoder {
             if (cached != null) {
                 return cached;
             }
-            if (stamp instanceof AbstractObjectStamp) {
-                AbstractObjectStamp objectStamp = (AbstractObjectStamp) stamp;
+            if (stamp instanceof AbstractObjectStamp objectStamp) {
                 ResolvedJavaType type = objectStamp.type();
                 if (type == null) {
                     return stamp;
@@ -957,7 +959,7 @@ public class SymbolicSnippetEncoder {
             constantsLinesResult.append('\n');
         }
 
-        return constantsLinesResult.toString() + result.toString();
+        return constantsLinesResult + result.toString();
     }
 
     private static int filteredUsageCount(Node node) {

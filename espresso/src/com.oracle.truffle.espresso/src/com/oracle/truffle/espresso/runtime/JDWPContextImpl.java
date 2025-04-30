@@ -38,10 +38,11 @@ import com.oracle.truffle.api.debug.Debugger;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.instrumentation.InstrumentableNode;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
-import com.oracle.truffle.api.profiles.BranchProfile;
 import com.oracle.truffle.espresso.EspressoLanguage;
 import com.oracle.truffle.espresso.blocking.EspressoLock;
 import com.oracle.truffle.espresso.classfile.bytecode.BytecodeStream;
@@ -59,6 +60,7 @@ import com.oracle.truffle.espresso.jdwp.api.Ids;
 import com.oracle.truffle.espresso.jdwp.api.JDWPContext;
 import com.oracle.truffle.espresso.jdwp.api.KlassRef;
 import com.oracle.truffle.espresso.jdwp.api.MethodRef;
+import com.oracle.truffle.espresso.jdwp.api.MethodVersionRef;
 import com.oracle.truffle.espresso.jdwp.api.ModuleRef;
 import com.oracle.truffle.espresso.jdwp.api.MonitorStackInfo;
 import com.oracle.truffle.espresso.jdwp.api.RedefineInfo;
@@ -72,7 +74,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.BciProvider;
 import com.oracle.truffle.espresso.nodes.EspressoInstrumentableRootNode;
 import com.oracle.truffle.espresso.nodes.EspressoRootNode;
-import com.oracle.truffle.espresso.nodes.quick.interop.ForeignArrayUtils;
+import com.oracle.truffle.espresso.nodes.interop.ToEspressoNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.threads.State;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
@@ -306,9 +308,9 @@ public final class JDWPContextImpl implements JDWPContext {
     }
 
     @Override
-    public MethodRef getMethodFromRootNode(RootNode root) {
+    public MethodVersionRef getMethodFromRootNode(RootNode root) {
         if (root != null && root instanceof EspressoRootNode) {
-            return ((EspressoRootNode) root).getMethod();
+            return ((EspressoRootNode) root).getMethodVersion();
         }
         return null;
     }
@@ -471,45 +473,59 @@ public final class JDWPContextImpl implements JDWPContext {
     @Override
     public Object getArrayValue(Object array, int index) {
         StaticObject arrayRef = (StaticObject) array;
-        Object value;
+        Klass componentType = ((ArrayKlass) arrayRef.getKlass()).getComponentType();
+        Meta meta = componentType.getMeta();
         if (arrayRef.isForeignObject()) {
-            value = ForeignArrayUtils.readForeignArrayElement(arrayRef, index, context.getLanguage(), context.getMeta(), InteropLibrary.getUncached(), BranchProfile.create());
-            if (!(value instanceof StaticObject)) {
-                // For JDWP we have to have a ref type, so here we have to create a copy
-                // value when possible as a StaticObject based on the foreign type.
-                // Note: we only support Host String conversion for now
-                if (value instanceof String) {
-                    return context.getMeta().toGuestString((String) value);
-                } else {
-                    throw new IllegalStateException("foreign object conversion not supported");
-                }
+            Object value = null;
+            try {
+                value = InteropLibrary.getUncached().readArrayElement(arrayRef.rawForeignObject(arrayRef.getKlass().getLanguage()), index);
+                return ToEspressoNode.getUncachedToEspresso(componentType, meta).execute(value);
+            } catch (UnsupportedMessageException e) {
+                throw EspressoError.shouldNotReachHere("readArrayElement on a non-array foreign object", e);
+            } catch (InvalidArrayIndexException e) {
+                throw meta.throwExceptionWithMessage(meta.java_lang_ArrayIndexOutOfBoundsException, e.getMessage());
+            } catch (UnsupportedTypeException e) {
+                throw meta.throwExceptionWithMessage(meta.java_lang_ClassCastException, "%s cannot be cast to %s", value, componentType.getTypeAsString());
             }
-        } else if (((ArrayKlass) arrayRef.getKlass()).getComponentType().isPrimitive()) {
+        } else if (componentType.isPrimitive()) {
             // primitive array type needs wrapping
             Object boxedArray = getUnboxedArray(array);
-            value = Array.get(boxedArray, index);
+            return Array.get(boxedArray, index);
         } else {
-            value = arrayRef.get(context.getLanguage(), index);
+            return arrayRef.get(context.getLanguage(), index);
         }
-        return value;
     }
 
     @Override
     public void setArrayValue(Object array, int index, Object value) {
         StaticObject arrayRef = (StaticObject) array;
-        byte tag = getTag(value);
-        switch (tag) {
-            case TagConstants.BOOLEAN -> context.getInterpreterToVM().setArrayByte(context.getLanguage(), (boolean) value ? (byte) 1 : 0, index, arrayRef);
-            case TagConstants.BYTE -> context.getInterpreterToVM().setArrayByte(context.getLanguage(), (byte) value, index, arrayRef);
-            case TagConstants.SHORT -> context.getInterpreterToVM().setArrayShort(context.getLanguage(), (short) value, index, arrayRef);
-            case TagConstants.CHAR -> context.getInterpreterToVM().setArrayChar(context.getLanguage(), (char) value, index, arrayRef);
-            case TagConstants.INT -> context.getInterpreterToVM().setArrayInt(context.getLanguage(), (int) value, index, arrayRef);
-            case TagConstants.FLOAT -> context.getInterpreterToVM().setArrayFloat(context.getLanguage(), (float) value, index, arrayRef);
-            case TagConstants.LONG -> context.getInterpreterToVM().setArrayLong(context.getLanguage(), (long) value, index, arrayRef);
-            case TagConstants.DOUBLE -> context.getInterpreterToVM().setArrayDouble(context.getLanguage(), (double) value, index, arrayRef);
-            case TagConstants.ARRAY, TagConstants.STRING, TagConstants.OBJECT ->
-                context.getInterpreterToVM().setArrayObject(context.getLanguage(), (StaticObject) value, index, arrayRef);
-            default -> throw new RuntimeException("should not reach here: " + tag);
+        Klass componentType = ((ArrayKlass) arrayRef.getKlass()).getComponentType();
+        Meta meta = componentType.getMeta();
+        if (arrayRef.isForeignObject()) {
+            try {
+                Object unWrappedValue = value;
+                if (value instanceof StaticObject staticObject) {
+                    unWrappedValue = staticObject.isForeignObject() ? staticObject.rawForeignObject(meta.getLanguage()) : staticObject;
+                }
+                InteropLibrary.getUncached().writeArrayElement(arrayRef.rawForeignObject(arrayRef.getKlass().getLanguage()), index, unWrappedValue);
+            } catch (UnsupportedMessageException e) {
+                throw EspressoError.shouldNotReachHere("writeArrayElement on a non-array foreign object", e);
+            } catch (InvalidArrayIndexException e) {
+                throw meta.throwExceptionWithMessage(meta.java_lang_ArrayIndexOutOfBoundsException, e.getMessage());
+            } catch (UnsupportedTypeException e) {
+                throw meta.throwExceptionWithMessage(meta.java_lang_ClassCastException, "%s cannot be cast to %s", value, componentType.getTypeAsString());
+            }
+        } else if (componentType.isPrimitive()) {
+            // primitive array type needs wrapping
+            Object boxedArray = getUnboxedArray(array);
+            // special handling for boolean because they're stored as byte
+            if (value instanceof Boolean aBoolean) {
+                Array.set(boxedArray, index, aBoolean ? (byte) 1 : (byte) 0);
+            } else {
+                Array.set(boxedArray, index, value);
+            }
+        } else {
+            context.getInterpreterToVM().setArrayObject(meta.getLanguage(), (StaticObject) value, index, arrayRef);
         }
     }
 
@@ -646,7 +662,7 @@ public final class JDWPContextImpl implements JDWPContext {
         if (callerRoot instanceof EspressoRootNode espressoRootNode) {
             int bci = (int) readBCIFromFrame(callerRoot, frame);
             if (bci >= 0) {
-                BytecodeStream bs = new BytecodeStream(espressoRootNode.getMethod().getOriginalCode());
+                BytecodeStream bs = new BytecodeStream(espressoRootNode.getMethodVersion().getOriginalCode());
                 return bs.nextBCI(bci);
             }
         }
@@ -665,8 +681,8 @@ public final class JDWPContextImpl implements JDWPContext {
     public CallFrame locateObjectWaitFrame() {
         Object currentThread = asGuestThread(Thread.currentThread());
         KlassRef klass = context.getMeta().java_lang_Object;
-        MethodRef method = context.getMeta().java_lang_Object_wait;
-        return new CallFrame(ids.getIdAsLong(currentThread), TypeTag.CLASS, ids.getIdAsLong(klass), method, ids.getIdAsLong(method), 0, null, null, null, null, null, LOGGER);
+        MethodVersionRef methodVersion = context.getMeta().java_lang_Object_wait.getMethodVersion();
+        return new CallFrame(ids.getIdAsLong(currentThread), TypeTag.CLASS, ids.getIdAsLong(klass), methodVersion, ids.getIdAsLong(methodVersion.getMethod()), 0, null, null, null, null, null, LOGGER);
     }
 
     @Override

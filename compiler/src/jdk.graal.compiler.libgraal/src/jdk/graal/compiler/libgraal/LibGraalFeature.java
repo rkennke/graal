@@ -31,7 +31,6 @@ import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,7 +58,7 @@ import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.FieldValueTransformer;
 import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
-import org.graalvm.nativeimage.libgraal.LibGraalLoader;
+import org.graalvm.nativeimage.libgraal.hosted.LibGraalLoader;
 
 import jdk.graal.compiler.core.common.Fields;
 import jdk.graal.compiler.core.common.LibGraalSupport.HostedOnly;
@@ -199,7 +198,7 @@ public final class LibGraalFeature implements Feature {
         // (see jdk.graal.compiler.graph.NodeClass.allocateInstance).
         access.registerObjectReachabilityHandler(nodeClass -> {
             Class<?> clazz = nodeClass.getClazz();
-            if (!Modifier.isAbstract(clazz.getModifiers())) {
+            if (!nodeClass.isAbstract()) {
                 /* Support for NodeClass.allocateInstance. */
                 beforeAnalysisAccess.registerAsUnsafeAllocated(clazz);
             }
@@ -232,12 +231,19 @@ public final class LibGraalFeature implements Feature {
             Map<String, String> modules = libgraalLoader.getClassModuleMap();
             for (OptionKey<?> option : options) {
                 OptionDescriptor descriptor = option.getDescriptor();
-                if (descriptor.isServiceLoaded()) {
+                if (descriptor != null && descriptor.getContainer().optionsAreDiscoverable()) {
                     GraalError.guarantee(access.isReachable(option.getClass()), "%s", option.getClass());
                     GraalError.guarantee(access.isReachable(descriptor.getClass()), "%s", descriptor.getClass());
 
                     String name = option.getName();
-                    OptionsParser.libgraalOptions.descriptors().put(name, descriptor);
+                    OptionDescriptor conflict = OptionsParser.libgraalOptions.descriptors().put(name, descriptor);
+                    if (conflict != null) {
+                        throw new GraalError("Duplicate option names for %s.% and %s.%s",
+                                        descriptor.getDeclaringClass().getName(),
+                                        descriptor.getFieldName(),
+                                        conflict.getDeclaringClass().getName(),
+                                        conflict.getFieldName());
+                    }
 
                     String module = modules.get(descriptor.getDeclaringClass().getName());
                     if (module.contains("enterprise")) {
@@ -245,6 +251,7 @@ public final class LibGraalFeature implements Feature {
                     }
                 }
             }
+            OptionDescriptor.sealHelpStrings();
         }
     }
 
@@ -367,9 +374,12 @@ public final class LibGraalFeature implements Feature {
         EncodedSnippets encodedSnippets = (EncodedSnippets) libgraalObjects.get("encodedSnippets");
         checkNodeClasses(encodedSnippets, (String) libgraalObjects.get("snippetNodeClasses"));
 
-        // Mark all the Node classes as allocated so they are available during graph decoding.
+        // Mark all non-abstract Node classes as allocated so they
+        // are available during graph decoding.
         for (NodeClass<?> nodeClass : encodedSnippets.getSnippetNodeClasses()) {
-            access.registerAsInHeap(nodeClass.getClazz());
+            if (!nodeClass.isAbstract()) {
+                access.registerAsInHeap(nodeClass.getClazz());
+            }
         }
         HotSpotReplacementsImpl.setEncodedSnippets(encodedSnippets);
 
@@ -381,7 +391,7 @@ public final class LibGraalFeature implements Feature {
 
     private static void checkNodeClasses(EncodedSnippets encodedSnippets, String actual) {
         String expect = CompilerConfig.snippetNodeClassesToJSON(encodedSnippets);
-        GraalError.guarantee(actual.equals(expect), "%s != %s", actual, expect);
+        GraalError.guarantee(actual.equals(expect), "%n%s%n !=%n%s", actual, expect);
     }
 
     /**

@@ -164,7 +164,7 @@ mx_sdk_vm.register_vm_config('libgraal', ['cmp', 'lg', 'sdkc', 'tflc'], _suite)
 mx_sdk_vm.register_vm_config('toolchain-only', ['antlr4', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'tfl', 'tfla', 'tflc', 'tflm', 'nfi-libffi', 'nfi', 'cmp', 'llp', 'llrc', 'llrlf', 'llrn'], _suite)
 mx_sdk_vm.register_vm_config('libgraal-bash', llvm_components + ['cmp', 'gvm', 'lg', 'nfi-libffi', 'nfi', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'tfl', 'tfla', 'tflc', 'tflm'], _suite, env_file=False)
 mx_sdk_vm.register_vm_config('toolchain-only-bash', llvm_components + ['antlr4', 'tfl', 'tfla', 'tflc', 'tflm', 'gvm', 'llp', 'nfi-libffi', 'nfi', 'svml', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'llrc', 'llrlf', 'llrn', 'cmp'], _suite, env_file=False)
-mx_sdk_vm.register_vm_config('ce', llvm_components + ['antlr4', 'java', 'libpoly', 'sjavavm', 'spolyglot', 'ejvm', 'sjsvm', 'sllvmvm', 'bnative-image', 'srubyvm', 'pynl', 'spythonvm', 'pyn', 'cmp', 'gwa', 'gwal', 'icu4j', 'xz', 'js', 'jsl', 'jss', 'lg', 'llp', 'nfi-libffi', 'nfi', 'ni', 'nil', 'pbm', 'pmh', 'pbi', 'rby', 'rbyl', 'rgx', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'llrc', 'llrn', 'llrl', 'llrlf', 'snative-image-agent', 'snative-image-diagnostics-agent', 'svm', 'svmt', 'svmnfi', 'svmsl', 'swasmvm', 'tfl', 'tfla', 'tflc', 'tflm'], _suite, env_file='polybench-ce')
+mx_sdk_vm.register_vm_config('ce', llvm_components + ['antlr4', 'sjsvm', 'sllvmvm', 'bnative-image', 'srubyvm', 'pynl', 'spythonvm', 'pyn', 'cmp', 'gwa', 'gwal', 'icu4j', 'xz', 'js', 'jsl', 'jss', 'lg', 'llp', 'nfi-libffi', 'nfi', 'ni', 'nil', 'pbm', 'pmh', 'pbi', 'rby', 'rbyl', 'rgx', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'llrc', 'llrn', 'llrl', 'llrlf', 'snative-image-agent', 'snative-image-diagnostics-agent', 'svm', 'svmt', 'svmnfi', 'svmsl', 'swasmvm', 'tfl', 'tfla', 'tflc', 'tflm'], _suite, env_file='polybench-ce')
 mx_sdk_vm.register_vm_config('ce', ['bnative-image', 'bpolybench', 'cmp', 'icu4j', 'xz', 'lg', 'nfi', 'ni', 'nil', 'pbi', 'pbm', 'pmh', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'snative-image-agent', 'snative-image-diagnostics-agent', 'svm', 'svmt', 'svmnfi', 'svmsl', 'tfl', 'tfla', 'tflc', 'tflm'], _suite, dist_name='ce', env_file='polybench-ctw-ce')
 mx_sdk_vm.register_vm_config('ce', ['pbm', 'pmh', 'pbi', 'ni', 'icu4j', 'xz', 'js', 'jsl', 'jss', 'lg', 'nfi-libffi', 'nfi', 'tfl', 'tfla', 'tflc', 'svm', 'svmt', 'nil', 'rgx', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'cmp', 'tflm', 'svmnfi', 'svmsl', 'bnative-image', 'sjsvm', 'snative-image-agent', 'snative-image-diagnostics-agent'], _suite, env_file='polybench-nfi-ce')
 mx_sdk_vm.register_vm_config('ce', llvm_components + ['antlr4', 'sllvmvm', 'bnative-image', 'cmp', 'lg', 'llrc', 'llrl', 'llrlf', 'llrn', 'nfi-libffi', 'nfi', 'ni', 'nil', 'pbm', 'pbi', 'sdk', 'sdkni', 'sdkc', 'sdkl', 'snative-image-agent', 'snative-image-diagnostics-agent', 'svm', 'svmt', 'svmnfi', 'svmsl', 'tfl', 'tfla', 'tflc', 'tflm'], _suite, env_file='polybench-sulong-ce')
@@ -241,7 +241,7 @@ def register_community_tools_distribution(owner_suite, register_distribution):
                 'artifactId': 'tools-community',
                 'tag': ['default', 'public'],
             },
-            'description': 'This is POM dependency pulls in all tools for Graal Languages and Truffle Community Edition.',
+            'description': 'This is POM dependency includes all tools for Graal Languages and Truffle Community Edition.',
         }
         tools_community = mx_pomdistribution.POMDistribution(owner_suite, 'TOOLS_COMMUNITY', [], tools_meta_poms, sorted(list(tools_licenses)), **attrs)
         register_distribution(tools_community)
@@ -303,7 +303,7 @@ def register_community_languages_distribution(owner_suite, register_distribution
                 'artifactId': 'languages-community',
                 'tag': ['default', 'public'],
             },
-            'description': 'This POM dependency pulls in all Graal Languages and Truffle Community Edition.',
+            'description': 'This POM dependency includes all Graal Languages and Truffle Community Edition.',
         }
         languages_community = mx_pomdistribution.POMDistribution(owner_suite, 'LANGUAGES_COMMUNITY', [], languages_meta_poms, sorted(list(languages_licenses)), **attrs)
         register_distribution(languages_community)

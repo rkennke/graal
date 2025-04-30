@@ -111,18 +111,25 @@ public final class UnimplementedGraalIntrinsics {
 
         if (jdk >= 25) {
             add(toBeInvestigated,
+                            // JDK-8307513: C2: intrinsify Math.max(long,long) and
+                            // Math.min(long,long)
+                            "java/lang/Math.max(JJ)J",
+                            "java/lang/Math.min(JJ)J",
                             // JDK-8342103: C2 compiler support for Float16 type and associated
                             // scalar operations
                             "jdk/internal/vm/vector/Float16Math.fma(Ljava/lang/Class;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljdk/internal/vm/vector/Float16Math$TernaryOperator;)Ljava/lang/Object;",
-                            "jdk/internal/vm/vector/Float16Math.sqrt(Ljava/lang/Class;Ljava/lang/Object;Ljava/util/function/UnaryOperator;)Ljava/lang/Object;",
-                            // JDK-8348561: Add aarch64 intrinsics for ML-DSA
-                            // JDK-8351034: Add AVX-512 intrinsics for ML-DSA
-                            "sun/security/provider/ML_DSA.implDilithiumAlmostInverseNtt([I[I)I",
-                            "sun/security/provider/ML_DSA.implDilithiumAlmostNtt([I[I)I",
-                            "sun/security/provider/ML_DSA.implDilithiumDecomposePoly([I[I[III)I",
-                            "sun/security/provider/ML_DSA.implDilithiumMontMulByConstant([II)I",
-                            "sun/security/provider/ML_DSA.implDilithiumNttMult([I[I[I)I",
-                            "sun/security/provider/SHA3Parallel.doubleKeccak([J[J)I");
+                            "jdk/internal/vm/vector/Float16Math.sqrt(Ljava/lang/Class;Ljava/lang/Object;Ljava/util/function/UnaryOperator;)Ljava/lang/Object;");
+
+            add(toBeInvestigated,
+                            // JDK-8349721: Add aarch64 intrinsics for ML-KEM
+                            // JDK-8351412: Add AVX-512 intrinsics for ML-KEM
+                            "com/sun/crypto/provider/ML_KEM.implKyber12To16([BI[SI)I",
+                            "com/sun/crypto/provider/ML_KEM.implKyberAddPoly([S[S[S)I",
+                            "com/sun/crypto/provider/ML_KEM.implKyberAddPoly([S[S[S[S)I",
+                            "com/sun/crypto/provider/ML_KEM.implKyberBarrettReduce([S)I",
+                            "com/sun/crypto/provider/ML_KEM.implKyberInverseNtt([S[S)I",
+                            "com/sun/crypto/provider/ML_KEM.implKyberNtt([S[S)I",
+                            "com/sun/crypto/provider/ML_KEM.implKyberNttMult([S[S[S[S)I");
         }
 
         add(ignore,

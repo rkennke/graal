@@ -34,7 +34,6 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
-import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -146,7 +145,7 @@ public class CommonOptionParser {
                 return showAll || svmOption && printFlags.contains(d.getOptionType());
             }
             if (!optionNameFilter.isEmpty()) {
-                if (optionNameFilter.contains(EXTRA_HELP_OPTIONS_WILDCARD) && !d.getExtraHelp().isEmpty()) {
+                if (optionNameFilter.contains(EXTRA_HELP_OPTIONS_WILDCARD) && d.getHelp().size() > 1) {
                     return true;
                 }
                 return optionNameFilter.contains(d.getName());
@@ -174,7 +173,7 @@ public class CommonOptionParser {
         }
     }
 
-    public static void collectOptions(ServiceLoader<OptionDescriptors> optionDescriptors, Consumer<OptionDescriptor> optionDescriptorConsumer) {
+    public static void collectOptions(Iterable<OptionDescriptors> optionDescriptors, Consumer<OptionDescriptor> optionDescriptorConsumer) {
         for (OptionDescriptors optionDescriptor : optionDescriptors) {
             for (OptionDescriptor descriptor : optionDescriptor) {
                 optionDescriptorConsumer.accept(descriptor);
@@ -358,15 +357,15 @@ public class CommonOptionParser {
     }
 
     public static long parseLong(String v) {
-        String valueString = v.trim().toLowerCase();
+        String valueString = v.trim();
         long scale = 1;
-        if (valueString.endsWith("k")) {
+        if (valueString.endsWith("k") || valueString.endsWith("K")) {
             scale = 1024L;
-        } else if (valueString.endsWith("m")) {
+        } else if (valueString.endsWith("m") || valueString.endsWith("M")) {
             scale = 1024L * 1024L;
-        } else if (valueString.endsWith("g")) {
+        } else if (valueString.endsWith("g") || valueString.endsWith("G")) {
             scale = 1024L * 1024L * 1024L;
-        } else if (valueString.endsWith("t")) {
+        } else if (valueString.endsWith("t") || valueString.endsWith("T")) {
             scale = 1024L * 1024L * 1024L * 1024L;
         }
 
@@ -490,7 +489,8 @@ public class CommonOptionParser {
         sortedDescriptors.sort(Comparator.comparing(OptionDescriptor::getName));
 
         for (OptionDescriptor descriptor : sortedDescriptors) {
-            String helpMsg = descriptor.getHelp();
+            List<String> helpLines = descriptor.getHelp();
+            String helpMsg = helpLines.getFirst();
             // ensure helpMsg ends with dot
             int helpLen = helpMsg.length();
             if (helpLen > 0 && helpMsg.charAt(helpLen - 1) != '.') {
@@ -529,9 +529,9 @@ public class CommonOptionParser {
             }
             // handle extra help
             String verboseHelp = "";
-            if (!descriptor.getExtraHelp().isEmpty()) {
+            if (helpLines.size() > 1) {
                 if (verbose) {
-                    verboseHelp = System.lineSeparator() + String.join(System.lineSeparator(), descriptor.getExtraHelp());
+                    verboseHelp = System.lineSeparator() + String.join(System.lineSeparator(), helpLines.subList(1, helpLines.size()));
                 } else {
                     verboseHelp = " [Extra help available]";
                 }

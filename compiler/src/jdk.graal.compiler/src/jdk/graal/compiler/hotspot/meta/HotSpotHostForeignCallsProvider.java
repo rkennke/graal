@@ -33,6 +33,12 @@ import static jdk.graal.compiler.hotspot.HotSpotBackend.BASE64_ENCODE_BLOCK;
 import static jdk.graal.compiler.hotspot.HotSpotBackend.BIGINTEGER_LEFT_SHIFT_WORKER;
 import static jdk.graal.compiler.hotspot.HotSpotBackend.BIGINTEGER_RIGHT_SHIFT_WORKER;
 import static jdk.graal.compiler.hotspot.HotSpotBackend.CHACHA20Block;
+import static jdk.graal.compiler.hotspot.HotSpotBackend.DILITHIUM_ALMOST_INVERSE_NTT;
+import static jdk.graal.compiler.hotspot.HotSpotBackend.DILITHIUM_ALMOST_NTT;
+import static jdk.graal.compiler.hotspot.HotSpotBackend.DILITHIUM_DECOMPOSE_POLY;
+import static jdk.graal.compiler.hotspot.HotSpotBackend.DILITHIUM_MONT_MUL_BY_CONSTANT;
+import static jdk.graal.compiler.hotspot.HotSpotBackend.DILITHIUM_NTT_MULT;
+import static jdk.graal.compiler.hotspot.HotSpotBackend.DOUBLE_KECCAK;
 import static jdk.graal.compiler.hotspot.HotSpotBackend.DYNAMIC_NEW_INSTANCE_OR_NULL;
 import static jdk.graal.compiler.hotspot.HotSpotBackend.ELECTRONIC_CODEBOOK_DECRYPT_AESCRYPT;
 import static jdk.graal.compiler.hotspot.HotSpotBackend.ELECTRONIC_CODEBOOK_ENCRYPT_AESCRYPT;
@@ -88,7 +94,6 @@ import static jdk.graal.compiler.hotspot.stubs.LookUpSecondarySupersTableStub.LO
 import static jdk.graal.compiler.hotspot.stubs.StubUtil.VM_MESSAGE_C;
 import static jdk.graal.compiler.hotspot.stubs.UnwindExceptionToCallerStub.EXCEPTION_HANDLER_FOR_RETURN_ADDRESS;
 import static jdk.graal.compiler.nodes.java.ForeignCallDescriptors.REGISTER_FINALIZER;
-import static jdk.graal.compiler.replacements.SnippetTemplate.AbstractTemplates.findMethod;
 import static jdk.graal.compiler.replacements.nodes.BinaryMathIntrinsicNode.BinaryOperation.POW;
 import static jdk.graal.compiler.replacements.nodes.UnaryMathIntrinsicNode.UnaryOperation.COS;
 import static jdk.graal.compiler.replacements.nodes.UnaryMathIntrinsicNode.UnaryOperation.EXP;
@@ -164,7 +169,6 @@ import jdk.vm.ci.code.CodeCacheProvider;
 import jdk.vm.ci.hotspot.HotSpotJVMCIRuntime;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.MetaAccessProvider;
-import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
  * HotSpot implementation of {@link ForeignCallsProvider}.
@@ -178,7 +182,7 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
     public static final HotSpotForeignCallDescriptor NOTIFY_ALL = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(), "object_notifyAll", int.class, Word.class, Object.class);
 
     public static final HotSpotForeignCallDescriptor INVOKE_STATIC_METHOD_ONE_ARG = new HotSpotForeignCallDescriptor(SAFEPOINT, NO_SIDE_EFFECT, NO_LOCATIONS,
-                    "JVMCIRuntime::invoke_static_method_one_arg", long.class, Word.class, Word.class, long.class);
+                    "JVMCIRuntime::invoke_static_method_one_arg", void.class, Word.class, Word.class, long.class);
 
     public static final HotSpotForeignCallDescriptor NMETHOD_ENTRY_BARRIER = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, NO_LOCATIONS, "nmethod_entry_barrier", void.class);
 
@@ -284,41 +288,13 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
 
         /**
          * Creates a {@link HotSpotForeignCallDescriptor} for a foreign call stub to a method named
-         * {@code <kind>Returns<Kind>} (e.g., "byteReturnsByte") with a signature of
-         * {@code (<kind>)<kind>} (e.g., {@code (byte)byte}).
+         * {@code passing<Kind>} (e.g., "passingByte") with an argument of {@code (<kind>)<kind>}
+         * (e.g., {@code (byte)void}).
          */
         public static HotSpotForeignCallDescriptor createStubCallDescriptor(JavaKind kind) {
-            String name = kind.isObject() ? "objectReturnsObject" : kind.getJavaName() + "Returns" + capitalize(kind.getJavaName());
+            String name = kind.isObject() ? "passingObject" : "passing" + capitalize(kind.getJavaName());
             Class<?> javaClass = kind.isObject() ? Object.class : kind.toJavaClass();
-            return new HotSpotForeignCallDescriptor(SAFEPOINT, NO_SIDE_EFFECT, NO_LOCATIONS, name, javaClass, javaClass);
-        }
-
-        static boolean booleanReturnsBoolean(boolean arg) {
-            return arg;
-        }
-
-        static byte byteReturnsByte(byte arg) {
-            return arg;
-        }
-
-        static short shortReturnsShort(short arg) {
-            return arg;
-        }
-
-        static char charReturnsChar(char arg) {
-            return arg;
-        }
-
-        static int intReturnsInt(int arg) {
-            return arg;
-        }
-
-        static long longReturnsLong(long arg) {
-            return arg;
-        }
-
-        static Object objectReturnsObject(Object arg) {
-            return arg;
+            return new HotSpotForeignCallDescriptor(SAFEPOINT, HAS_SIDE_EFFECT, any(), name, void.class, Word.class, javaClass);
         }
     }
 
@@ -405,8 +381,7 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
              */
             for (JavaKind kind : TestForeignCalls.KINDS) {
                 HotSpotForeignCallDescriptor desc = TestForeignCalls.createStubCallDescriptor(kind);
-                ResolvedJavaMethod method = findMethod(providers.getMetaAccess(), TestForeignCalls.class, desc.getName());
-                invokeJavaMethodStub(options, providers, desc, invokeJavaMethodAddress, method);
+                invokeJavaMethodStub(options, providers, desc, invokeJavaMethodAddress);
             }
         }
     }
@@ -698,6 +673,24 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
         }
         if (c.intpolyAssign != 0L) {
             registerForeignCall(INTPOLY_ASSIGN, c.intpolyAssign, NativeCall);
+        }
+        if (c.stubDoubleKeccak != 0L) {
+            registerForeignCall(DOUBLE_KECCAK, c.stubDoubleKeccak, NativeCall);
+        }
+        if (c.stubDilithiumAlmostNtt != 0L) {
+            registerForeignCall(DILITHIUM_ALMOST_NTT, c.stubDilithiumAlmostNtt, NativeCall);
+        }
+        if (c.stubDilithiumAlmostInverseNtt != 0L) {
+            registerForeignCall(DILITHIUM_ALMOST_INVERSE_NTT, c.stubDilithiumAlmostInverseNtt, NativeCall);
+        }
+        if (c.stubDilithiumNttMult != 0L) {
+            registerForeignCall(DILITHIUM_NTT_MULT, c.stubDilithiumNttMult, NativeCall);
+        }
+        if (c.stubDilithiumMontMulByConstant != 0L) {
+            registerForeignCall(DILITHIUM_MONT_MUL_BY_CONSTANT, c.stubDilithiumMontMulByConstant, NativeCall);
+        }
+        if (c.stubDilithiumDecomposePoly != 0L) {
+            registerForeignCall(DILITHIUM_DECOMPOSE_POLY, c.stubDilithiumDecomposePoly, NativeCall);
         }
 
         registerSnippetStubs(providers, options);

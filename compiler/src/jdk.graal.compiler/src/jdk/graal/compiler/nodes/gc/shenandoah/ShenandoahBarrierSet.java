@@ -32,6 +32,7 @@ import jdk.graal.compiler.nodeinfo.InputType;
 import jdk.graal.compiler.nodes.FixedWithNextNode;
 import jdk.graal.compiler.nodes.extended.ArrayRangeWrite;
 import jdk.graal.compiler.nodes.gc.BarrierSet;
+import jdk.graal.compiler.nodes.spi.CoreProviders;
 import jdk.graal.compiler.nodes.type.NarrowOopStamp;
 import org.graalvm.word.LocationIdentity;
 
@@ -173,7 +174,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
     }
 
     @Override
-    public void addBarriers(FixedAccessNode n) {
+    public void addBarriers(FixedAccessNode n, CoreProviders context) {
         switch (n) {
             case ReadNode readNode -> addReadNodeBarriers(readNode);
             case WriteNode write -> addWriteBarriers(write, write.value(), null, true);

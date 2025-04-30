@@ -35,7 +35,6 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -43,6 +42,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Locale;
@@ -120,6 +120,7 @@ import com.oracle.svm.common.meta.MultiMethod;
 import com.oracle.svm.core.BuildArtifacts;
 import com.oracle.svm.core.BuildPhaseProvider;
 import com.oracle.svm.core.ClassLoaderSupport;
+import com.oracle.svm.core.FutureDefaultsOptions;
 import com.oracle.svm.core.JavaMainWrapper.JavaMainSupport;
 import com.oracle.svm.core.LinkerInvocation;
 import com.oracle.svm.core.MissingRegistrationSupport;
@@ -152,9 +153,6 @@ import com.oracle.svm.core.graal.phases.RemoveUnwindPhase;
 import com.oracle.svm.core.graal.phases.SubstrateSafepointInsertionPhase;
 import com.oracle.svm.core.graal.snippets.DeoptTester;
 import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
-import com.oracle.svm.core.graal.snippets.OpenTypeWorldDispatchTableSnippets;
-import com.oracle.svm.core.graal.snippets.OpenTypeWorldSnippets;
-import com.oracle.svm.core.graal.snippets.TypeSnippets;
 import com.oracle.svm.core.graal.word.SubstrateWordOperationPlugins;
 import com.oracle.svm.core.graal.word.SubstrateWordTypes;
 import com.oracle.svm.core.heap.BarrierSetProvider;
@@ -171,6 +169,8 @@ import com.oracle.svm.core.option.RuntimeOptionValues;
 import com.oracle.svm.core.option.SubstrateOptionsParser;
 import com.oracle.svm.core.snippets.SnippetRuntime;
 import com.oracle.svm.core.util.InterruptImageBuilding;
+import com.oracle.svm.core.util.LayeredHostedImageHeapMapCollector;
+import com.oracle.svm.core.util.LayeredImageHeapMapStore;
 import com.oracle.svm.core.util.ObservableImageHeapMapProvider;
 import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.core.util.VMError;
@@ -734,6 +734,7 @@ public class NativeImageGenerator {
             compileQueue.purge();
 
             int numCompilations = codeCache.getOrderedCompilations().size();
+            int imageDiskFileSize = -1;
 
             try (StopTimer t = TimerCollection.createTimerAndStart(TimerCollection.Registry.WRITE)) {
                 loader.watchdog.recordActivity();
@@ -755,6 +756,12 @@ public class NativeImageGenerator {
 
                 AfterImageWriteAccessImpl afterConfig = new AfterImageWriteAccessImpl(featureHandler, loader, hUniverse, inv, tmpDir, image.getImageKind(), debug);
                 featureHandler.forEachFeature(feature -> feature.afterImageWrite(afterConfig));
+                try {
+                    // size changes during linking and afterConfig phase
+                    imageDiskFileSize = (int) inv.getOutputFile().toFile().length();
+                } catch (Exception e) {
+                    imageDiskFileSize = -1; // we can't read a disk file size
+                }
             }
             try (StopTimer t = TimerCollection.createTimerAndStart(TimerCollection.Registry.ARCHIVE_LAYER)) {
                 if (ImageLayerBuildingSupport.buildingSharedLayer()) {
@@ -762,7 +769,8 @@ public class NativeImageGenerator {
                     HostedImageLayerBuildingSupport.singleton().archiveLayer(imageName);
                 }
             }
-            reporter.printCreationEnd(image.getImageFileSize(), heap.getLayerObjectCount(), image.getImageHeapSize(), codeCache.getCodeAreaSize(), numCompilations, image.getDebugInfoSize());
+            reporter.printCreationEnd(image.getImageFileSize(), heap.getLayerObjectCount(), image.getImageHeapSize(), codeCache.getCodeAreaSize(), numCompilations, image.getDebugInfoSize(),
+                            imageDiskFileSize);
         }
     }
 
@@ -919,7 +927,7 @@ public class NativeImageGenerator {
 
                 ImageSingletons.add(SubstrateOptions.ReportingSupport.class, new SubstrateOptions.ReportingSupport(
                                 DiagnosticsMode.getValue() ? DiagnosticsDir.getValue().lastValue().get() : Path.of("reports")));
-
+                FutureDefaultsOptions.parseAndVerifyOptions();
                 if (javaMainSupport != null) {
                     ImageSingletons.add(JavaMainSupport.class, javaMainSupport);
                 }
@@ -947,6 +955,17 @@ public class NativeImageGenerator {
 
                 if (SubstrateOptions.useEconomyCompilerConfig()) {
                     GraalConfiguration.setHostedInstanceIfEmpty(new EconomyGraalConfiguration());
+                }
+
+                if (ImageLayerBuildingSupport.buildingImageLayer()) {
+                    /*
+                     * Register those singletons early as it needs to exist before any ImageHeapMap
+                     * is created.
+                     */
+                    ImageSingletons.add(LayeredImageHeapMapStore.class, new LayeredImageHeapMapStore());
+                    if (ImageLayerBuildingSupport.buildingInitialLayer()) {
+                        ImageSingletons.add(LayeredHostedImageHeapMapCollector.class, new LayeredHostedImageHeapMapCollector());
+                    }
                 }
 
                 /* Init the BuildPhaseProvider before any features need it. */
@@ -1021,6 +1040,9 @@ public class NativeImageGenerator {
 
                 bb = createBigBang(debug, options, aUniverse, aMetaAccess, aProviders, annotationSubstitutions);
                 aUniverse.setBigBang(bb);
+                if (imageLayerLoader != null) {
+                    imageLayerLoader.initNodeClassMap();
+                }
 
                 /* Create the HeapScanner and install it into the universe. */
                 ImageHeap imageHeap = new ImageHeap();
@@ -1072,6 +1094,7 @@ public class NativeImageGenerator {
                     FeatureImpl.DuringSetupAccessImpl config = new FeatureImpl.DuringSetupAccessImpl(featureHandler, loader, bb, debug);
                     featureHandler.forEachFeature(feature -> feature.duringSetup(config));
                 }
+                BuildPhaseProvider.markSetupFinished();
 
                 if (ImageLayerBuildingSupport.buildingExtensionLayer()) {
                     Heap.getHeap().setStartOffset(HostedImageLayerBuildingSupport.singleton().getLoader().getImageHeapSize());
@@ -1083,8 +1106,11 @@ public class NativeImageGenerator {
                 loader.classLoaderSupport.getClassesToIncludeUnconditionally().forEach(cls -> bb.registerTypeForBaseImage(cls));
 
                 var runtimeReflection = ImageSingletons.lookup(RuntimeReflectionSupport.class);
+
+                Set<String> classesOrPackagesToIgnore = ignoredClassesOrPackagesForPreserve();
                 loader.classLoaderSupport.getClassesToPreserve().parallel()
                                 .filter(ClassInclusionPolicy::isClassIncludedBase)
+                                .filter(c -> !(classesOrPackagesToIgnore.contains(c.getPackageName()) || classesOrPackagesToIgnore.contains(c.getName())))
                                 .forEach(c -> runtimeReflection.registerClassFully(ConfigurationCondition.alwaysTrue(), c));
                 for (String className : loader.classLoaderSupport.getClassNamesToPreserve()) {
                     RuntimeReflection.registerClassLookup(className);
@@ -1095,6 +1121,13 @@ public class NativeImageGenerator {
 
             ProgressReporter.singleton().printInitializeEnd(featureHandler.getUserSpecificFeatures(), loader);
         }
+    }
+
+    private static Set<String> ignoredClassesOrPackagesForPreserve() {
+        Set<String> ignoredClassesOrPackages = new HashSet<>(SubstrateOptions.IgnorePreserveForClasses.getValue().valuesAsSet());
+        // GR-63360: Parsing of constant_ lambda forms fails
+        ignoredClassesOrPackages.add("java.lang.invoke.LambdaForm$Holder");
+        return Collections.unmodifiableSet(ignoredClassesOrPackages);
     }
 
     protected void registerEntryPointStubs(Map<Method, CEntryPointData> entryPoints) {
@@ -1476,12 +1509,6 @@ public class NativeImageGenerator {
             Map<Class<? extends Node>, NodeLoweringProvider<?>> lowerings = lowerer.getLowerings();
 
             lowerer.setConfiguration(runtimeConfig, options, providers);
-            if (SubstrateOptions.useClosedTypeWorldHubLayout()) {
-                TypeSnippets.registerLowerings(options, providers, lowerings);
-            } else {
-                OpenTypeWorldSnippets.registerLowerings(options, providers, lowerings);
-                OpenTypeWorldDispatchTableSnippets.registerLowerings(options, providers, lowerings);
-            }
 
             featureHandler.forEachGraalFeature(feature -> feature.registerLowerings(runtimeConfig, options, providers, lowerings, hosted));
         } catch (Throwable e) {
@@ -1852,8 +1879,7 @@ public class NativeImageGenerator {
     }
 
     public static Path generatedFiles(OptionValues optionValues) {
-        String pathName = SubstrateOptions.Path.getValue(optionValues);
-        Path path = FileSystems.getDefault().getPath(pathName);
+        Path path = SubstrateOptions.getImagePath(optionValues);
         if (!Files.exists(path)) {
             try {
                 Files.createDirectories(path);
@@ -1862,7 +1888,7 @@ public class NativeImageGenerator {
             }
         }
         if (!Files.isDirectory(path)) {
-            throw VMError.shouldNotReachHere("Output path is not a directory: " + pathName);
+            throw VMError.shouldNotReachHere("Output path is not a directory: " + path);
         }
         return path.toAbsolutePath();
     }

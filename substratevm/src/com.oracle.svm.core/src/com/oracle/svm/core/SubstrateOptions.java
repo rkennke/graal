@@ -34,7 +34,6 @@ import static jdk.graal.compiler.options.OptionType.User;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -44,10 +43,12 @@ import org.graalvm.collections.UnmodifiableEconomicMap;
 import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platform.HOSTED_ONLY;
 import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.c.libc.LibCBase;
 import com.oracle.svm.core.c.libc.MuslLibC;
+import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.heap.ReferenceHandler;
 import com.oracle.svm.core.option.APIOption;
 import com.oracle.svm.core.option.APIOptionGroup;
@@ -63,6 +64,7 @@ import com.oracle.svm.core.option.RuntimeOptionKey;
 import com.oracle.svm.core.option.SubstrateOptionsParser;
 import com.oracle.svm.core.thread.VMOperationControl;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.util.LogUtils;
 import com.oracle.svm.util.ModuleSupport;
 import com.oracle.svm.util.ReflectionUtil;
@@ -76,6 +78,7 @@ import jdk.graal.compiler.options.OptionType;
 import jdk.graal.compiler.options.OptionValues;
 import jdk.graal.compiler.phases.common.DeadCodeEliminationPhase;
 import jdk.internal.misc.Unsafe;
+import jdk.vm.ci.amd64.AMD64;
 
 public class SubstrateOptions {
 
@@ -136,8 +139,13 @@ public class SubstrateOptions {
     @APIOption(name = "static")//
     @Option(help = "Build statically linked executable (requires static libc and zlib)")//
     public static final HostedOptionKey<Boolean> StaticExecutable = new HostedOptionKey<>(false, key -> {
+        if (!key.getValue()) {
+            return;
+        }
+
         if (!Platform.includedIn(Platform.LINUX.class)) {
-            throw UserError.invalidOptionValue(key, key.getValue(), "Building static executable images is currently only supported on Linux. Remove the '--static' option or build on a Linux machine");
+            throw UserError.invalidOptionValue(key, key.getValue(),
+                            "Building static executable images is currently only supported on Linux. Remove the '--static' option or build on a Linux machine");
         }
         if (!LibCBase.targetLibCIs(MuslLibC.class)) {
             throw UserError.invalidOptionValue(key, key.getValue(),
@@ -159,6 +167,10 @@ public class SubstrateOptions {
 
     @Option(help = "Mark singleton as application layer only")//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> ApplicationLayerOnlySingletons = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.build());
+
+    @Option(help = "Register class as being initialized in the app layer.")//
+    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> ApplicationLayerInitializedClasses = new HostedOptionKey<>(
+                    AccumulatingLocatableMultiOptionValue.Strings.build());
 
     @APIOption(name = "libc")//
     @Option(help = "Selects the libc implementation to use. Available implementations: glibc, musl, bionic")//
@@ -482,9 +494,19 @@ public class SubstrateOptions {
     @Option(help = "Path passed to the linker as the -rpath (list of comma-separated directories)")//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> LinkerRPath = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter());
 
-    @OptionMigrationMessage("Use the '-o' option instead.")//
-    @Option(help = "Directory of the image file to be generated", type = OptionType.User)//
-    public static final HostedOptionKey<String> Path = new HostedOptionKey<>(null);
+    @Platforms(HOSTED_ONLY.class)
+    public static Path getImagePath(OptionValues optionValues) {
+        VMError.guarantee(optionValues != null);
+        if (!ConcealedOptions.Path.hasBeenSet(optionValues)) {
+            VMError.shouldNotReachHere("Image builder requires %s", SubstrateOptionsParser.commandArgument(ConcealedOptions.Path, "<builder output directory>"));
+        }
+        return Path.of(ConcealedOptions.Path.getValue(optionValues));
+    }
+
+    @Platforms(HOSTED_ONLY.class)
+    public static Path getImagePath() {
+        return getImagePath(HostedOptionValues.singleton());
+    }
 
     public static final class GCGroup implements APIOptionGroup {
         @Override
@@ -678,9 +700,6 @@ public class SubstrateOptions {
     @Option(help = "Loads the specified native agent library specified by the absolute path name. " +
                     "After the library path, a comma-separated list of options specific to the library can be used.", type = OptionType.User)//
     public static final RuntimeOptionKey<String> JVMTIAgentPath = new RuntimeOptionKey<>(null);
-
-    @Option(help = "Alignment of AOT and JIT compiled code in bytes.")//
-    public static final HostedOptionKey<Integer> CodeAlignment = new HostedOptionKey<>(16);
 
     public static final String BUILD_ARTIFACTS_FILE_NAME = "build-artifacts.json";
     @Option(help = "Create a " + BUILD_ARTIFACTS_FILE_NAME + " file in the build directory. The output conforms to the JSON schema located at: " +
@@ -915,12 +934,8 @@ public class SubstrateOptions {
         return "lir".equals(CompilerBackend.getValue());
     }
 
-    /*
-     * RemoveUnusedSymbols is not enabled on Darwin by default, because the linker sometimes
-     * segfaults when the -dead_strip option is used.
-     */
     @Option(help = "Use linker option to prevent unreferenced symbols in image.")//
-    public static final HostedOptionKey<Boolean> RemoveUnusedSymbols = new HostedOptionKey<>(OS.getCurrent() != OS.DARWIN);
+    public static final HostedOptionKey<Boolean> RemoveUnusedSymbols = new HostedOptionKey<>(true);
     @Option(help = "Use linker option to remove all local symbols from image.")//
     public static final HostedOptionKey<Boolean> DeleteLocalSymbols = new HostedOptionKey<>(true);
     @Option(help = "Compatibility option to make symbols used for the image heap global. " +
@@ -972,7 +987,15 @@ public class SubstrateOptions {
      */
     @Fold
     public static int codeAlignment() {
-        return CodeAlignment.getValue();
+        int value = ConcealedOptions.CodeAlignment.getValue();
+        if (value > 0) {
+            return value;
+        }
+
+        if (ConfigurationValues.getTarget().arch instanceof AMD64 && optimizationLevel() != OptimizationLevel.SIZE) {
+            return 32;
+        }
+        return 16;
     }
 
     @Option(help = "Determines if VM internal threads (e.g., a dedicated VM operation or reference handling thread) are allowed in this image.", type = OptionType.Expert) //
@@ -1009,9 +1032,10 @@ public class SubstrateOptions {
     @Option(help = "Temporary option to disable checking of image builder module dependencies or increasing its verbosity", type = OptionType.Debug)//
     public static final HostedOptionKey<Integer> CheckBootModuleDependencies = new HostedOptionKey<>(ModuleSupport.modulePathBuild ? 1 : 0);
 
+    @Platforms(HOSTED_ONLY.class)
     public static Path getDebugInfoSourceCacheRoot() {
         try {
-            return Paths.get(Path.getValue()).resolve(DebugInfoSourceCacheRoot.getValue());
+            return SubstrateOptions.getImagePath().resolve(DebugInfoSourceCacheRoot.getValue());
         } catch (InvalidPathException ipe) {
             throw UserError.invalidOptionValue(DebugInfoSourceCacheRoot, DebugInfoSourceCacheRoot.getValue(), "The path is invalid");
         }
@@ -1121,11 +1145,17 @@ public class SubstrateOptions {
         @Option(help = "Physical memory size (in bytes). By default, the value is queried from the OS/container during VM startup.", type = OptionType.Expert)//
         public static final RuntimeOptionKey<Long> MaxRAM = new RuntimeOptionKey<>(0L, IsolateCreationOnly);
 
-        /**
-         * Use {@link SubstrateOptions#getAllocatePrefetchStyle()} instead.
-         */
+        /** Use {@link SubstrateOptions#getAllocatePrefetchStyle()} instead. */
         @Option(help = "Generated code style for prefetch instructions: for 0 or less no prefetch instructions are generated and for 1 or more prefetch instructions are introduced after each allocation.")//
         public static final HostedOptionKey<Integer> AllocatePrefetchStyle = new HostedOptionKey<>(null);
+
+        /** Use {@link SubstrateOptions#codeAlignment()} instead. */
+        @Option(help = "Alignment of AOT and JIT compiled code in bytes. The default of 0 automatically selects a suitable value.")//
+        public static final HostedOptionKey<Integer> CodeAlignment = new HostedOptionKey<>(0);
+
+        @OptionMigrationMessage("Use the '-o' option instead.")//
+        @Option(help = "Directory of the image file to be generated", type = OptionType.User)//
+        public static final HostedOptionKey<String> Path = new HostedOptionKey<>(null);
     }
 
     @Fold
@@ -1187,12 +1217,13 @@ public class SubstrateOptions {
     @Option(help = "file:doc-files/FlightRecorderOptionsHelp.txt")//
     public static final RuntimeOptionKey<String> FlightRecorderOptions = new RuntimeOptionKey<>("", Immutable);
 
+    @Platforms(HOSTED_ONLY.class)
     public static String reportsPath() {
         Path reportsPath = ImageSingletons.lookup(ReportingSupport.class).reportsPath;
         if (reportsPath.isAbsolute()) {
             return reportsPath.toString();
         }
-        return Paths.get(Path.getValue()).resolve(reportsPath).toString();
+        return getImagePath().resolve(reportsPath).toString();
     }
 
     public static class ReportingSupport {
@@ -1293,11 +1324,12 @@ public class SubstrateOptions {
         Exit
     }
 
-    @Option(help = {"Select the mode in which the missing reflection registrations will be reported.",
-                    "Possible values are:",
-                    "\"Throw\" (default): Throw a MissingReflectionRegistrationError;",
-                    "\"Exit\": Call System.exit() to avoid accidentally catching the error;",
-                    "\"Warn\": Print a message to stdout, including a stack trace to see what caused the issue."})//
+    @Option(help = """
+                    Select the mode in which the missing reflection registrations will be reported.
+                    Possible values are:",
+                     "Throw" (default): Throw a MissingReflectionRegistrationError;
+                     "Exit": Call System.exit() to avoid accidentally catching the error;
+                     "Warn": Print a message to stdout, including a stack trace to see what caused the issue.""")//
     public static final RuntimeOptionKey<ReportingMode> MissingRegistrationReportingMode = new RuntimeOptionKey<>(
                     ReportingMode.Throw);
 
@@ -1318,6 +1350,9 @@ public class SubstrateOptions {
 
     @Option(help = "file:doc-files/PreserveHelp.txt")//
     public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> Preserve = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.build());
+
+    @Option(help = "Ignore classes or packages (comma separated) from the ones included with '-H:Preserve'. This can be used to workaround potential issues related to '-H:Preserve'.", type = OptionType.Debug) //
+    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> IgnorePreserveForClasses = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.build());
 
     @Option(help = "Force include include all public types and methods that can be reached using normal Java access rules.")//
     public static final HostedOptionKey<Boolean> UseBaseLayerInclusionPolicy = new HostedOptionKey<>(false);
@@ -1374,11 +1409,21 @@ public class SubstrateOptions {
 
     @Option(help = "Enable fallback to mremap for initializing the image heap.")//
     public static final HostedOptionKey<Boolean> MremapImageHeap = new HostedOptionKey<>(true, key -> {
-        if (!Platform.includedIn(Platform.LINUX.class)) {
+        if (key.hasBeenSet() && !Platform.includedIn(Platform.LINUX.class)) {
             throw UserError.invalidOptionValue(key, key.getValue(), "Mapping the image heap with mremap() is only supported on Linux.");
         }
     });
 
-    @Option(help = "file:doc-files/LibGraalClassLoader.txt")//
+    @Option(help = """
+                    Specify the fully qualified name of a class that implements org.graalvm.nativeimage.libgraal.LibGraalLoader.
+
+                    This option is only supported for building the libgraal shared library.
+
+                    The named class is instantiated via the default constructor.
+                    It affects image building as follows:
+
+                     1. The custom loader is used to lookup Feature implementations passed via the --features option.
+                     2. All @CEntryPoint definitions in classes loaded by the custom loader are processed.
+                     3. All @TargetClass substitutions in classes loaded by the custom loader are processed.""")//
     public static final HostedOptionKey<String> LibGraalClassLoader = new HostedOptionKey<>("");
 }

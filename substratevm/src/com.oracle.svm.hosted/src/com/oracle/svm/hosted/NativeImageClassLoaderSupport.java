@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -75,7 +75,7 @@ import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.MapCursor;
 import org.graalvm.nativeimage.impl.AnnotationExtractor;
-import org.graalvm.nativeimage.libgraal.LibGraalLoader;
+import org.graalvm.nativeimage.libgraal.hosted.LibGraalLoader;
 
 import com.oracle.svm.core.NativeImageClassLoaderOptions;
 import com.oracle.svm.core.SubstrateOptions;
@@ -324,7 +324,11 @@ public final class NativeImageClassLoaderSupport {
 
     public void setupHostedOptionParser(List<String> arguments) {
         hostedOptionParser = new HostedOptionParser(getClassLoader(), arguments);
+        // Explicitly set the default value of Optimize as it can modify the default values of other
+        // options
+        SubstrateOptions.Optimize.update(hostedOptionParser.getHostedValues(), SubstrateOptions.Optimize.getDefaultValue());
         remainingArguments = Collections.unmodifiableList((hostedOptionParser.parse()));
+
         /*
          * The image layer support needs to be configured early to correctly set the
          * class-path/module-path options. Note that parsedHostedOptions is a copy-by-value of
@@ -817,7 +821,7 @@ public final class NativeImageClassLoaderSupport {
                     initModule(moduleReference, true);
                 }
 
-                classpath().parallelStream().forEach(this::loadClassesFromPath);
+                classpath().forEach(this::loadClassesFromPath);
             } finally {
                 scheduledExecutor.shutdown();
             }

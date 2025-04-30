@@ -34,7 +34,6 @@ import java.util.Arrays;
 import java.util.stream.Stream;
 
 import org.graalvm.nativeimage.ImageSingletons;
-import org.graalvm.nativeimage.c.function.CFunctionPointer;
 import org.graalvm.nativeimage.c.function.RelocatedPointer;
 import org.graalvm.nativeimage.impl.CEntryPointLiteralCodePointer;
 import org.graalvm.word.WordBase;
@@ -48,12 +47,15 @@ import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.config.ConfigurationValues;
 import com.oracle.svm.core.config.ObjectLayout;
+import com.oracle.svm.core.graal.code.CGlobalDataBasePointer;
 import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.heap.ObjectHeader;
 import com.oracle.svm.core.hub.DynamicHub;
+import com.oracle.svm.core.identityhashcode.IdentityHashCodeSupport;
 import com.oracle.svm.core.image.ImageHeapLayoutInfo;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.core.meta.MethodPointer;
+import com.oracle.svm.core.util.HostedByteBufferPointer;
 import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.DeadlockWatchdog;
 import com.oracle.svm.hosted.code.CEntryPointLiteralFeature;
@@ -61,7 +63,7 @@ import com.oracle.svm.hosted.config.DynamicHubLayout;
 import com.oracle.svm.hosted.config.HybridLayout;
 import com.oracle.svm.hosted.image.NativeImageHeap.ObjectInfo;
 import com.oracle.svm.hosted.imagelayer.CrossLayerConstantRegistryFeature;
-import com.oracle.svm.hosted.imagelayer.LayeredDispatchTableSupport;
+import com.oracle.svm.hosted.imagelayer.LayeredDispatchTableFeature;
 import com.oracle.svm.hosted.meta.HostedClass;
 import com.oracle.svm.hosted.meta.HostedField;
 import com.oracle.svm.hosted.meta.HostedInstanceClass;
@@ -137,11 +139,7 @@ public final class NativeImageHeapWriter {
         ObjectInfo primitiveFields = heap.getObjectInfo(StaticFieldsSupport.getCurrentLayerStaticPrimitiveFields());
         ObjectInfo objectFields = heap.getObjectInfo(StaticFieldsSupport.getCurrentLayerStaticObjectFields());
         for (HostedField field : heap.hUniverse.getFields()) {
-            if (field.wrapped.isInBaseLayer()) {
-                /* Base layer static field values are accessed via the base layer arrays. */
-                continue;
-            }
-            if (Modifier.isStatic(field.getModifiers()) && field.hasLocation() && field.isRead()) {
+            if (field.getWrapped().installableInLayer() && Modifier.isStatic(field.getModifiers()) && field.hasLocation() && field.isRead()) {
                 assert field.isWritten() || !field.isValueAvailable() || MaterializedConstantFields.singleton().contains(field.wrapped);
                 ObjectInfo fields = (field.getStorageKind() == JavaKind.Object) ? objectFields : primitiveFields;
                 writeField(buffer, fields, field, null, null);
@@ -272,7 +270,7 @@ public final class NativeImageHeapWriter {
         write(buffer, index, con, info);
     }
 
-    private void writeObjectHeader(RelocatableBuffer buffer, int index, ObjectInfo obj) {
+    private void writeHubPointer(RelocatableBuffer buffer, int index, ObjectInfo obj) {
         mustBeReferenceAligned(index);
 
         DynamicHub hub = obj.getClazz().getHub();
@@ -281,14 +279,16 @@ public final class NativeImageHeapWriter {
         assert hubInfo != null : "Unknown object " + hub + " found. Static field or an object referenced from a static field changed during native image generation?";
 
         ObjectHeader objectHeader = Heap.getHeap().getObjectHeader();
+        int hubSize = heap.objectLayout.getHubSize();
         if (NativeImageHeap.useHeapBase()) {
             long targetOffset = hubInfo.getOffset();
-            long headerBits = objectHeader.encodeAsImageHeapObjectHeader(obj, targetOffset);
-            writeReferenceValue(buffer, index, headerBits);
+            long encoding = objectHeader.encodeHubPointerForImageHeap(obj, targetOffset);
+            writeValue(buffer, index, encoding, hubSize);
         } else {
+            assert hubSize == referenceSize();
             // The address of the DynamicHub target will be added by the link editor.
-            long headerBits = objectHeader.encodeAsImageHeapObjectHeader(obj, 0L);
-            addDirectRelocationWithAddend(buffer, index, hub, headerBits);
+            long encoding = objectHeader.encodeHubPointerForImageHeap(obj, 0L);
+            addDirectRelocationWithAddend(buffer, index, hub, encoding);
         }
     }
 
@@ -314,8 +314,7 @@ public final class NativeImageHeapWriter {
      */
     private void addNonDataRelocation(RelocatableBuffer buffer, int index, RelocatedPointer pointer) {
         mustBeReferenceAligned(index);
-        assert pointer instanceof CFunctionPointer : "unknown relocated pointer " + pointer;
-        assert pointer instanceof MethodPointer : "cannot create relocation for unknown FunctionPointer " + pointer;
+        assert pointer instanceof MethodPointer || pointer instanceof CGlobalDataBasePointer : "unknown relocated pointer " + pointer;
         int pointerSize = ConfigurationValues.getTarget().wordSize;
         addDirectRelocationWithoutAddend(buffer, index, pointerSize, pointer);
     }
@@ -353,12 +352,16 @@ public final class NativeImageHeapWriter {
     }
 
     private void writeReferenceValue(RelocatableBuffer buffer, int index, long value) {
-        if (referenceSize() == Long.BYTES) {
+        writeValue(buffer, index, value, referenceSize());
+    }
+
+    private static void writeValue(RelocatableBuffer buffer, int index, long value, int size) {
+        if (size == Long.BYTES) {
             buffer.getByteBuffer().putLong(index, value);
-        } else if (referenceSize() == Integer.BYTES) {
+        } else if (size == Integer.BYTES) {
             buffer.getByteBuffer().putInt(index, NumUtil.safeToUInt(value));
         } else {
-            throw shouldNotReachHere("Unsupported reference size: " + referenceSize());
+            throw shouldNotReachHere("Unsupported value size: " + size);
         }
     }
 
@@ -372,7 +375,7 @@ public final class NativeImageHeapWriter {
         DynamicHubLayout dynamicHubLayout = heap.dynamicHubLayout;
         assert objectLayout.isAligned(getIndexInBuffer(info, 0));
 
-        writeObjectHeader(buffer, getIndexInBuffer(info, objectLayout.getHubOffset()), info);
+        writeHubPointer(buffer, getIndexInBuffer(info, objectLayout.getHubOffset()), info);
 
         ByteBuffer bufferBytes = buffer.getByteBuffer();
         HostedClass clazz = info.getClazz();
@@ -422,7 +425,7 @@ public final class NativeImageHeapWriter {
                 instanceFields = instanceFields.filter(field -> !dynamicHubLayout.isIgnoredField(field));
 
                 if (imageLayer) {
-                    LayeredDispatchTableSupport.singleton().registerWrittenDynamicHub((DynamicHub) info.getObject(), heap.aUniverse, heap.hUniverse, vTable);
+                    LayeredDispatchTableFeature.singleton().registerWrittenDynamicHub((DynamicHub) info.getObject(), heap.aUniverse, heap.hUniverse, vTable);
                 }
 
             } else if (heap.getHybridLayout(clazz) != null) {
@@ -444,7 +447,6 @@ public final class NativeImageHeapWriter {
                 idHashOffset = hybridLayout.getIdentityHashOffset(length);
                 instanceFields = instanceFields.filter(field -> !field.equals(hybridArrayField));
             } else {
-
                 idHashOffset = instanceClazz.getIdentityHashOffset();
             }
 
@@ -460,9 +462,9 @@ public final class NativeImageHeapWriter {
             });
 
             /* Write the identity hashcode */
-            assert idHashOffset > 0;
-            bufferBytes.putInt(getIndexInBuffer(info, idHashOffset), info.getIdentityHashCode());
-
+            assert idHashOffset >= 0;
+            HostedByteBufferPointer identityHashPtr = new HostedByteBufferPointer(bufferBytes, getIndexInBuffer(info, idHashOffset));
+            IdentityHashCodeSupport.writeIdentityHashCodeToImageHeap(identityHashPtr, info.getIdentityHashCode());
         } else if (clazz.isArray()) {
 
             JavaKind kind = clazz.getComponentType().getStorageKind();
@@ -470,20 +472,32 @@ public final class NativeImageHeapWriter {
 
             int length = heap.hConstantReflection.readArrayLength(constant);
             bufferBytes.putInt(getIndexInBuffer(info, objectLayout.getArrayLengthOffset()), length);
-            bufferBytes.putInt(getIndexInBuffer(info, objectLayout.getArrayIdentityHashOffset(kind, length)), info.getIdentityHashCode());
+            HostedByteBufferPointer identityHashPtr = getHashCodePtr(info, bufferBytes, objectLayout, kind, length);
+            IdentityHashCodeSupport.writeIdentityHashCodeToImageHeap(identityHashPtr, info.getIdentityHashCode());
 
             if (clazz.getComponentType().isPrimitive()) {
                 ImageHeapPrimitiveArray imageHeapArray = (ImageHeapPrimitiveArray) constant;
                 writePrimitiveArray(info, buffer, objectLayout, kind, imageHeapArray.getArray(), length);
             } else {
                 heap.hConstantReflection.forEachArrayElement(constant, (element, index) -> {
-                    final int elementIndex = getIndexInBuffer(info, objectLayout.getArrayElementOffset(kind, index));
-                    writeConstant(buffer, elementIndex, kind, element, info);
+                    long elementOffset = objectLayout.getArrayElementOffset(kind, index);
+                    final int elementIndex = getIndexInBuffer(info, elementOffset);
+                    if (element instanceof ImageHeapRelocatableConstant ihcConstant) {
+                        int heapOffset = NumUtil.safeToInt(info.getOffset() + elementOffset);
+                        CrossLayerConstantRegistryFeature.singleton().markFutureHeapConstantPatchSite(ihcConstant, heapOffset);
+                        fillReferenceWithGarbage(buffer, elementIndex);
+                    } else {
+                        writeConstant(buffer, elementIndex, kind, element, info);
+                    }
                 });
             }
         } else {
             throw shouldNotReachHereUnexpectedInput(clazz); // ExcludeFromJacocoGeneratedReport
         }
+    }
+
+    private HostedByteBufferPointer getHashCodePtr(ObjectInfo info, ByteBuffer bufferBytes, ObjectLayout objectLayout, JavaKind kind, int length) {
+        return new HostedByteBufferPointer(bufferBytes, getIndexInBuffer(info, objectLayout.getArrayIdentityHashOffset(kind, length)));
     }
 
     private int getIndexInBuffer(ObjectInfo objInfo, long offset) {

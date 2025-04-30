@@ -57,7 +57,7 @@ public abstract class RuntimeState {
     private static final int INITIAL_TABLES_SIZE = 1;
     private static final int INITIAL_MEMORIES_SIZE = 1;
 
-    private final WasmContext context;
+    private final WasmStore store;
     private final WasmModule module;
 
     /**
@@ -108,7 +108,7 @@ public abstract class RuntimeState {
      */
     private final int droppedDataInstanceOffset;
 
-    @CompilationFinal private Linker.LinkState linkState;
+    @CompilationFinal private volatile Linker.LinkState linkState;
 
     @CompilationFinal private int startFunctionIndex;
 
@@ -136,8 +136,8 @@ public abstract class RuntimeState {
         }
     }
 
-    public RuntimeState(WasmContext context, WasmModule module, int numberOfFunctions, int droppedDataInstanceOffset) {
-        this.context = context;
+    public RuntimeState(WasmStore store, WasmModule module, int numberOfFunctions, int droppedDataInstanceOffset) {
+        this.store = store;
         this.module = module;
         this.globalAddresses = new int[INITIAL_GLOBALS_SIZE];
         this.tableAddresses = new int[INITIAL_TABLES_SIZE];
@@ -179,8 +179,16 @@ public abstract class RuntimeState {
         this.linkState = Linker.LinkState.failed;
     }
 
+    public WasmStore store() {
+        return store;
+    }
+
     public WasmContext context() {
-        return context;
+        return store().context();
+    }
+
+    public Linker.LinkState linkState() {
+        return linkState;
     }
 
     public boolean isNonLinked() {
