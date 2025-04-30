@@ -131,7 +131,6 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
         this.tmp = tmp;
         this.tmp2 = tmp2;
         this.tmp3 = tmp3;
-        System.out.println("ReadBarrierOp");
     }
 
     @Override
@@ -155,8 +154,6 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
         if (!notNull) {
             // Check for object being null.
             masm.testAndJcc(AMD64BaseAssembler.OperandSize.QWORD, resultRegister, resultRegister, AMD64Assembler.ConditionFlag.Zero, done, true);
-            //masm.cmpq(resultRegister, 0);
-            //masm.jcc(AMD64Assembler.ConditionFlag.Zero, done);
         }
 
         // Check for heap stability
@@ -168,10 +165,10 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
             // This is true even for non-cset objects.
             // Two tests because HAS_FORWARDED | WEAK_ROOTS currently is not representable
             // as a single immediate.
-            masm.testlAndJcc(rscratch1, GCState.HAS_FORWARDED.getValue(), AMD64Assembler.ConditionFlag.Zero, slow_path, true);
-            masm.testlAndJcc(rscratch1, GCState.WEAK_ROOTS.getValue(), AMD64Assembler.ConditionFlag.Zero, slow_path, true);
+            masm.testlAndJcc(rscratch1, GCState.HAS_FORWARDED.getValue(), AMD64Assembler.ConditionFlag.NotZero, slow_path, false);
+            masm.testlAndJcc(rscratch1, GCState.WEAK_ROOTS.getValue(), AMD64Assembler.ConditionFlag.NotZero, slow_path, false);
         } else {
-            masm.testlAndJcc(rscratch1, GCState.HAS_FORWARDED.getValue(), AMD64Assembler.ConditionFlag.Zero, cset_check, true);
+            masm.testlAndJcc(rscratch1, GCState.HAS_FORWARDED.getValue(), AMD64Assembler.ConditionFlag.NotZero, cset_check, false);
         }
         masm.bind(done);
 

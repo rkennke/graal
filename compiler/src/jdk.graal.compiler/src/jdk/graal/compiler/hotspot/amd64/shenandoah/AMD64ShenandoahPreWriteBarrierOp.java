@@ -92,7 +92,6 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
         this.callTarget = callTarget;
         this.nonNull = nonNull;
         GraalError.guarantee(expectedObject.equals(Value.ILLEGAL) || expectedObject.getPlatformKind().getSizeInBytes() == 8, "expected uncompressed pointer");
-        System.out.println("PreWriteBarrierOp");
     }
 
     public void loadObject(AMD64MacroAssembler masm, Register preVal, Register immediateAddress) {
@@ -130,8 +129,6 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
         if (!nonNull) {
             // Is the previous value null?
             masm.testAndJcc(AMD64BaseAssembler.OperandSize.QWORD, previousValue, previousValue, AMD64Assembler.ConditionFlag.Zero, done, true);
-            //masm.cmpq(previousValue, 0);
-            //masm.jcc(AMD64Assembler.ConditionFlag.Equal, done);
         }
 
         if (VerifyAssemblyGCBarriers.getValue(crb.getOptions())) {
