@@ -34,7 +34,6 @@ import jdk.graal.compiler.core.common.CompressEncoding;
 import jdk.graal.compiler.core.common.spi.ForeignCallLinkage;
 import jdk.graal.compiler.debug.GraalError;
 import jdk.graal.compiler.hotspot.GraalHotSpotVMConfig;
-import jdk.graal.compiler.hotspot.HotSpotMarkId;
 import jdk.graal.compiler.hotspot.amd64.AMD64HotSpotMacroAssembler;
 import jdk.graal.compiler.hotspot.meta.HotSpotProviders;
 import jdk.graal.compiler.hotspot.replacements.HotSpotReplacementsUtil;
@@ -57,6 +56,8 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
     public static final LIRInstructionClass<AMD64ShenandoahPreWriteBarrierOp> TYPE = LIRInstructionClass.create(AMD64ShenandoahPreWriteBarrierOp.class);
     private final GraalHotSpotVMConfig config;
     private final HotSpotProviders providers;
+    private final ForeignCallLinkage callTarget;
+    private final boolean nonNull;
 
     @Alive
     private Value address;
@@ -72,9 +73,6 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
 
     @Temp
     private Value temp3;
-
-    private final ForeignCallLinkage callTarget;
-    private final boolean nonNull;
 
     public AMD64ShenandoahPreWriteBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers,
                                               AllocatableValue address, AllocatableValue expectedObject,
@@ -111,7 +109,6 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
         Register tmp = asRegister(temp);
         Register tmp3 = asRegister(temp3);
         Register previousValue = expectedObject.equals(Value.ILLEGAL) ? asRegister(temp2) : asRegister(expectedObject);
-
         guaranteeDifferentRegisters(storeAddress, thread, tmp, tmp3, previousValue);
 
         Label done = new Label();
@@ -132,7 +129,7 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
         }
 
         if (VerifyAssemblyGCBarriers.getValue(crb.getOptions())) {
-            verifyOop(masm, previousValue, tmp, tmp3, false, true);
+            verifyOop(masm, previousValue, tmp, tmp3);
         }
 
         if (AssemblyGCBarriersSlowPathOnly.getValue(crb.getOptions())) {
@@ -166,6 +163,8 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
         crb.getLIR().addSlowPath(this, () -> {
             masm.bind(runtime);
             CallingConvention cc = callTarget.getOutgoingCallingConvention();
+            assert cc.getArgumentCount() == 1 : "Expecting callTarget to have only 1 parameters. It has " + cc.getArgumentCount();
+
             AMD64Address cArg0 = (AMD64Address) crb.asAddress(cc.getArgument(0));
             masm.movq(cArg0, previousValue);
             AMD64Call.directCall(crb, masm, callTarget, null, false, null);
@@ -173,7 +172,7 @@ public class AMD64ShenandoahPreWriteBarrierOp extends AMD64LIRInstruction {
         });
     }
 
-    private void verifyOop(AMD64MacroAssembler masm, Register previousValue, Register tmp, Register tmp2, boolean compressed, boolean nonNull) {
-        ((AMD64HotSpotMacroAssembler) masm).verifyOop(previousValue, tmp, tmp2, compressed, nonNull);
+    private void verifyOop(AMD64MacroAssembler masm, Register previousValue, Register tmp, Register tmp2) {
+        ((AMD64HotSpotMacroAssembler) masm).verifyOop(previousValue, tmp, tmp2, false, true);
     }
 }

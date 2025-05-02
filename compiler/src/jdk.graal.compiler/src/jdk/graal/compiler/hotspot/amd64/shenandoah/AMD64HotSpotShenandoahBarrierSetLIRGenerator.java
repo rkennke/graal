@@ -80,9 +80,8 @@ public class AMD64HotSpotShenandoahBarrierSetLIRGenerator implements ShenandoahB
         AMD64AddressValue loadAddress = ((AMD64LIRGenerator) tool).asAddressValue(address);
         AllocatableValue tmp = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp2 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
-        AllocatableValue tmp3 = tool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         tool.getResult().getFrameMapBuilder().callsMethod(callTarget.getOutgoingCallingConvention());
-        tool.append(new AMD64HotSpotShenandoahReadBarrierOp(config, providers, tool.asAllocatable(result), object, loadAddress, callTarget, strength, tmp, tmp2, tmp3, notNull));
+        tool.append(new AMD64HotSpotShenandoahReadBarrierOp(config, providers, tool.asAllocatable(result), object, loadAddress, callTarget, strength, tmp, tmp2, notNull));
         return result;
     }
 
@@ -107,8 +106,7 @@ public class AMD64HotSpotShenandoahBarrierSetLIRGenerator implements ShenandoahB
         AMD64AddressValue addr = ((AMD64LIRGenerator) lirTool).asAddressValue(address);
         AllocatableValue tmp = lirTool.newVariable(LIRKind.value(AMD64Kind.QWORD));
         AllocatableValue tmp2 = lirTool.newVariable(LIRKind.value(AMD64Kind.QWORD));
-        AllocatableValue tmp3 = lirTool.newVariable(LIRKind.value(AMD64Kind.QWORD));
-        lirTool.append(new AMD64HotSpotShenandoahCardBarrierOp(config, providers, addr, tmp, tmp2, tmp3));
+        lirTool.append(new AMD64HotSpotShenandoahCardBarrierOp(config, providers, addr, tmp, tmp2));
     }
 
     private static ShenandoahLoadBarrierNode.ReferenceStrength getReferenceStrength(BarrierType barrierType) {
@@ -119,30 +117,4 @@ public class AMD64HotSpotShenandoahBarrierSetLIRGenerator implements ShenandoahB
             case ARRAY, FIELD, UNKNOWN, POST_INIT_WRITE, AS_NO_KEEPALIVE_WRITE -> throw GraalError.shouldNotReachHere("Unexpected barrier type: " + barrierType);
         };
     }
-
-//    @Override
-//    public Value emitBarrieredLoad(LIRGeneratorTool tool, LIRKind kind, Value address, LIRFrameState state, MemoryOrderMode memoryOrder, BarrierType barrierType) {
-//        Value load = tool.getArithmetic().emitLoad(kind, address, state, memoryOrder, MemoryExtendKind.DEFAULT);
-//        return emitLoadReferenceBarrier(tool, load, address, getReferenceStrength(barrierType));
-//    }
-//
-//    @Override
-//    public Value emitAtomicReadAndWrite(LIRGeneratorTool tool, LIRKind readKind, Value address, Value newValue, BarrierType barrierType) {
-//        Value xchg = tool.emitAtomicReadAndWrite(readKind, address, newValue, barrierType);
-//        return emitLoadReferenceBarrier(tool, xchg, address, getReferenceStrength(barrierType));
-//    }
-//
-//    @Override
-//    public void emitCompareAndSwapOp(LIRGeneratorTool tool, boolean isLogic, Value address, MemoryOrderMode memoryOrder, AArch64Kind memKind, Variable result, AllocatableValue allocatableExpectedValue, AllocatableValue allocatableNewValue, BarrierType barrierType) {
-//        tool.append(new AArch64AtomicMove.CompareAndSwapOp(memKind, memoryOrder, isLogic, result, allocatableExpectedValue, allocatableNewValue, tool.asAllocatable(address)));
-//        if (!isLogic) {
-//            boolean compressed = result.getValueKind().getPlatformKind() == AArch64Kind.DWORD;
-//            Value lrb = emitLoadReferenceBarrier(tool, result, address, getReferenceStrength(barrierType));
-//            if (compressed) {
-//                tool.append(new AArch64Move.Move(AArch64Kind.DWORD, result, tool.asAllocatable(lrb)));
-//            } else {
-//                tool.append(new AArch64Move.Move(AArch64Kind.QWORD, result, tool.asAllocatable(lrb)));
-//            }
-//        }
-//    }
 }

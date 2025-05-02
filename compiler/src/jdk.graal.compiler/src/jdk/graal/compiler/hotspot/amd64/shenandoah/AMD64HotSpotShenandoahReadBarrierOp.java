@@ -45,6 +45,7 @@ import jdk.vm.ci.code.CallingConvention;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.meta.AllocatableValue;
 
+import static jdk.graal.compiler.asm.Assembler.guaranteeDifferentRegisters;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
@@ -98,27 +99,32 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
         GCState(int val) { this.value = val; }
         public int getValue() { return this.value; }
     }
+
     private final HotSpotProviders providers;
     private final GraalHotSpotVMConfig config;
+    private final ForeignCallLinkage callTarget;
+    private final ShenandoahLoadBarrierNode.ReferenceStrength strength;
+    private final boolean notNull;
 
-    @Temp({REG}) protected AllocatableValue tmp;
-    @Temp({REG}) protected AllocatableValue tmp2;
-    @Temp({REG}) protected AllocatableValue tmp3;
-    @Def({REG}) protected AllocatableValue result;
-    @Use({REG}) protected AllocatableValue object;
-    @Alive({COMPOSITE}) protected AMD64AddressValue loadAddress;
+    @Temp({REG})
+    private AllocatableValue tmp;
 
-    protected final ForeignCallLinkage callTarget;
+    @Temp({REG})
+    private AllocatableValue tmp2;
 
-    ShenandoahLoadBarrierNode.ReferenceStrength strength;
-    boolean notNull;
+    @Def({REG})
+    private AllocatableValue result;
+
+    @Alive({REG})
+    private AllocatableValue object;
+
+    @Alive({COMPOSITE})
+    private AMD64AddressValue loadAddress;
 
     public AMD64HotSpotShenandoahReadBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers,
                                                  AllocatableValue result, AllocatableValue object, AMD64AddressValue loadAddress,
-                                                 ForeignCallLinkage callTarget,
-                                                 ShenandoahLoadBarrierNode.ReferenceStrength strength,
-                                                 AllocatableValue tmp, AllocatableValue tmp2, AllocatableValue tmp3,
-                                                 boolean notNull) {
+                                                 ForeignCallLinkage callTarget,  ShenandoahLoadBarrierNode.ReferenceStrength strength,
+                                                 AllocatableValue tmp, AllocatableValue tmp2, boolean notNull) {
         super(TYPE);
         this.providers = providers;
         this.config = config;
@@ -130,23 +136,21 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
         this.notNull = notNull;
         this.tmp = tmp;
         this.tmp2 = tmp2;
-        this.tmp3 = tmp3;
     }
 
     @Override
     public void emitCode(CompilationResultBuilder crb, AMD64MacroAssembler masm) {
-        Register rscratch1 = asRegister(tmp);
-        Register rscratch2 = asRegister(tmp2);
-
-        Register objectRegister = asRegister(object);
-        AMD64Address loadAddr = loadAddress.toAddress(masm);
-        Register resultRegister = asRegister(result);
-
         Register thread = providers.getRegisters().getThreadRegister();
+        Register rtmp1 = asRegister(tmp);
+        Register rtmp2 = asRegister(tmp2);
+        Register objectRegister = asRegister(object);
+        Register resultRegister = asRegister(result);
+        AMD64Address loadAddr = loadAddress.toAddress(masm);
+        guaranteeDifferentRegisters(thread, rtmp1, rtmp2, objectRegister, resultRegister);
 
         Label done = new Label();
-        Label cset_check = new Label();
-        Label slow_path = new Label();
+        Label csetCheck = new Label();
+        Label slowPath = new Label();
 
         // Move object to result, in case the heap is stable and no barrier needs to be called.
         masm.movq(resultRegister, objectRegister);
@@ -157,33 +161,30 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
         }
 
         // Check for heap stability
-        masm.movb(rscratch1, new AMD64Address(thread, HotSpotReplacementsUtil.shenandoahGCStateOffset(config)));
+        masm.movb(rtmp1, new AMD64Address(thread, HotSpotReplacementsUtil.shenandoahGCStateOffset(config)));
         if (strength != ShenandoahLoadBarrierNode.ReferenceStrength.STRONG) {
             // This is needed because in a short-cut cycle we may get a trailing
             // weak-roots phase but no evacuation/update-refs phase, and during that,
             // we need to take the LRB to report null for unreachable weak-refs.
             // This is true even for non-cset objects.
-            // Two tests because HAS_FORWARDED | WEAK_ROOTS currently is not representable
-            // as a single immediate.
-            masm.testlAndJcc(rscratch1, GCState.HAS_FORWARDED.getValue(), AMD64Assembler.ConditionFlag.NotZero, slow_path, false);
-            masm.testlAndJcc(rscratch1, GCState.WEAK_ROOTS.getValue(), AMD64Assembler.ConditionFlag.NotZero, slow_path, false);
+            masm.testlAndJcc(rtmp1, GCState.HAS_FORWARDED.getValue() | GCState.WEAK_ROOTS.getValue(), AMD64Assembler.ConditionFlag.NotZero, slowPath, false);
         } else {
-            masm.testlAndJcc(rscratch1, GCState.HAS_FORWARDED.getValue(), AMD64Assembler.ConditionFlag.NotZero, cset_check, false);
+            masm.testlAndJcc(rtmp1, GCState.HAS_FORWARDED.getValue(), AMD64Assembler.ConditionFlag.NotZero, csetCheck, false);
         }
         masm.bind(done);
 
         // Check for object in collection set in an out-of-line mid-path.
         if (strength == ShenandoahLoadBarrierNode.ReferenceStrength.STRONG) {
             crb.getLIR().addSlowPath(this, () -> {
-                masm.bind(cset_check);
+                masm.bind(csetCheck);
 
-                masm.movq(rscratch1, HotSpotReplacementsUtil.shenandoahGCCSetFastTestAddr(config));
-                masm.movq(rscratch2, objectRegister);
-                masm.shrq(rscratch2, HotSpotReplacementsUtil.shenandoahGCRegionSizeBytesShift(config));
+                masm.movq(rtmp1, HotSpotReplacementsUtil.shenandoahGCCSetFastTestAddr(config));
+                masm.movq(rtmp2, objectRegister);
+                masm.shrq(rtmp2, HotSpotReplacementsUtil.shenandoahGCRegionSizeBytesShift(config));
 
-                masm.addq(rscratch2, rscratch1);
-                masm.cmpb(new AMD64Address(rscratch2), 0);
-                masm.jcc(AMD64Assembler.ConditionFlag.NotZero, slow_path);
+                masm.addq(rtmp2, rtmp1);
+                masm.cmpb(new AMD64Address(rtmp2), 0);
+                masm.jcc(AMD64Assembler.ConditionFlag.NotZero, slowPath);
 
                 masm.jmp(done);
             });
@@ -191,7 +192,7 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
 
         // Call runtime slow-path LRB in out-of-line slow-path.
         crb.getLIR().addSlowPath(this, () -> {
-            masm.bind(slow_path);
+            masm.bind(slowPath);
             CallingConvention cc = callTarget.getOutgoingCallingConvention();
             assert cc.getArgumentCount() == 2 : "Expecting callTarget to have only 2 parameters. It has " + cc.getArgumentCount();
 
@@ -202,8 +203,8 @@ public class AMD64HotSpotShenandoahReadBarrierOp extends AMD64LIRInstruction {
             masm.movq(cArg0, objectRegister);
 
             // Store second argument
-            masm.leaq(rscratch1, loadAddr);
-            masm.movq(cArg1, rscratch1);
+            masm.leaq(rtmp1, loadAddr);
+            masm.movq(cArg1, rtmp1);
 
             // Make the call
             AMD64Call.directCall(crb, masm, callTarget, null, false, null);

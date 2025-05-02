@@ -39,53 +39,56 @@ import jdk.graal.compiler.lir.asm.CompilationResultBuilder;
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.meta.AllocatableValue;
 
+import static jdk.graal.compiler.asm.Assembler.guaranteeDifferentRegisters;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.COMPOSITE;
 import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
 
 public class AMD64HotSpotShenandoahCardBarrierOp  extends AMD64LIRInstruction {
     public static final LIRInstructionClass<AMD64HotSpotShenandoahCardBarrierOp> TYPE = LIRInstructionClass.create(AMD64HotSpotShenandoahCardBarrierOp.class);
-
     private final GraalHotSpotVMConfig config;
     private final HotSpotProviders providers;
 
-    @Alive({COMPOSITE}) protected AMD64AddressValue address;
-    @Temp({REG}) protected AllocatableValue tmp;
-    @Temp({REG}) protected AllocatableValue tmp2;
-    @Temp({REG}) protected AllocatableValue tmp3;
-    protected AMD64HotSpotShenandoahCardBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers, AMD64AddressValue addr, AllocatableValue tmp, AllocatableValue tmp2, AllocatableValue tmp3) {
+    @Alive({COMPOSITE})
+    private AMD64AddressValue address;
+
+    @Temp({REG})
+    private AllocatableValue tmp;
+
+    @Temp({REG})
+    private AllocatableValue tmp2;
+
+    protected AMD64HotSpotShenandoahCardBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers, AMD64AddressValue addr, AllocatableValue tmp, AllocatableValue tmp2) {
         super(TYPE);
         this.config = config;
         this.providers = providers;
         this.address = addr;
         this.tmp = tmp;
         this.tmp2 = tmp2;
-        this.tmp3 = tmp3;
-        System.out.println("CardBarrierOp");
     }
 
     @Override
     public void emitCode(CompilationResultBuilder crb, AMD64MacroAssembler masm) {
-        int dirtyCardValue = 0;
-        Register rAddr = asRegister(tmp);
+        Register rtmp1 = asRegister(tmp);
         Register rtmp2 = asRegister(tmp2);
         Register rthread = providers.getRegisters().getThreadRegister();
+        guaranteeDifferentRegisters(rtmp1, rtmp2, rthread);
 
-        masm.leaq(rAddr, address.toAddress(masm));
-        masm.shrq(rAddr, HotSpotReplacementsUtil.cardTableShift(config));
+        masm.leaq(rtmp1, address.toAddress(masm));
+        masm.shrq(rtmp1, HotSpotReplacementsUtil.cardTableShift(config));
 
         AMD64Address currCTHolderAddr = new AMD64Address(rthread, HotSpotReplacementsUtil.shenandoahCardTableOffset(config));
         masm.movq(rtmp2, currCTHolderAddr);
 
-        AMD64Address cardAddr = new AMD64Address(rAddr, rtmp2, Stride.S1);
+        AMD64Address cardAddr = new AMD64Address(rtmp1, rtmp2, Stride.S1);
         if (HotSpotReplacementsUtil.useCondCardMark(config)) {
             Label alreadyDirty = new Label();
-            masm.cmpb(cardAddr, dirtyCardValue);
+            masm.cmpb(cardAddr, 0 /* dirtyCardValue */);
             masm.jccb(AMD64Assembler.ConditionFlag.Equal, alreadyDirty);
-            masm.movb(cardAddr, dirtyCardValue);
+            masm.movb(cardAddr, 0 /* dirtyCardValue */);
             masm.bind(alreadyDirty);
         } else {
-            masm.movb(cardAddr, dirtyCardValue);
+            masm.movb(cardAddr, 0 /* dirtyCardValue */);
         }
     }
 }
