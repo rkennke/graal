@@ -645,7 +645,7 @@ public class GraalHotSpotVMConfig extends GraalHotSpotVMConfigAccess {
     public final long shenandoahLoadBarrierWeakNarrow = getAddress("ShenandoahRuntime::load_reference_barrier_weak_narrow");
     public final long shenandoahLoadBarrierPhantom = getAddress("ShenandoahRuntime::load_reference_barrier_phantom");
     public final long shenandoahLoadBarrierPhantomNarrow = getAddress("ShenandoahRuntime::load_reference_barrier_phantom_narrow");
-    public final long shenandoahPreBarrier = getAddress("ShenandoahRuntime::pre_barrier");
+    public final long shenandoahWriteBarrierPre = getAddress("ShenandoahRuntime::write_barrier_pre");
 
     // aarch64 specific nmethod entry barrier support
     // @formatter:off

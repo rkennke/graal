@@ -83,7 +83,7 @@ public class AArch64HotSpotShenandoahBarrierSetLIRGenerator implements Shenandoa
         AllocatableValue addressValue = lirTool.newVariable(address.getValueKind());
         lirTool.emitMove(addressValue, address);
 
-        ForeignCallLinkage callTarget = lirTool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_PRE_BARRIER);
+        ForeignCallLinkage callTarget = lirTool.getForeignCalls().lookupForeignCall(HotSpotHostForeignCallsProvider.SHENANDOAH_WRITE_BARRIER_PRE);
         lirTool.getResult().getFrameMapBuilder().callsMethod(callTarget.getOutgoingCallingConvention());
         lirTool.append(new AArch64ShenandoahPreWriteBarrierOp(config, providers, addressValue, expectedObject, temp, temp2, callTarget, nonNull));
     }
