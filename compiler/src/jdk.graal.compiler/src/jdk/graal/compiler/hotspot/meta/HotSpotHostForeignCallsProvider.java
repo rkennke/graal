@@ -107,7 +107,6 @@ import static org.graalvm.word.LocationIdentity.any;
 
 import java.util.EnumMap;
 
-import jdk.graal.compiler.debug.GraalError;
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.word.LocationIdentity;
 
