@@ -235,28 +235,28 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
 
     // oopDesc* ShenandoahRuntime::load_reference_barrier_strong(oopDesc* o, oop* p);
     public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
-            "ShenandoahRuntime::load_reference_barrier_strong", Object.class, Object.class, Word.class);
+                    "ShenandoahRuntime::load_reference_barrier_strong", Object.class, Object.class, Word.class);
     // oopDesc* ShenandoahRuntime::load_reference_barrier_strong_narrow(oopDesc* o, narrowOop* p);
     public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
-            "ShenandoahRuntime::load_reference_barrier_strong_narrow", Object.class, Object.class, Word.class);
+                    "ShenandoahRuntime::load_reference_barrier_strong_narrow", Object.class, Object.class, Word.class);
 
     // oopDesc* ShenandoahRuntime::load_reference_barrier_weak(oopDesc* o, oop* p);
     public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_WEAK = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
-            "ShenandoahRuntime::load_reference_barrier_weak", Object.class, Object.class, Word.class);
+                    "ShenandoahRuntime::load_reference_barrier_weak", Object.class, Object.class, Word.class);
     // oopDesc* ShenandoahRuntime::load_reference_barrier_weak_narrow(oopDesc* o, narrowOop* p);
     public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_WEAK_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
-            "ShenandoahRuntime::load_reference_barrier_weak_narrow", Object.class, Object.class, Word.class);
+                    "ShenandoahRuntime::load_reference_barrier_weak_narrow", Object.class, Object.class, Word.class);
 
     // oopDesc* ShenandoahRuntime::load_reference_barrier_phantom(oopDesc* o, oop* p);
     public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_PHANTOM = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
-            "ShenandoahRuntime::load_reference_barrier_phantom", Object.class, Object.class, Word.class);
+                    "ShenandoahRuntime::load_reference_barrier_phantom", Object.class, Object.class, Word.class);
     // oopDesc* ShenandoahRuntime::load_reference_barrier_phantom_narrow(oopDesc* o, narrowOop* p);
     public static final HotSpotForeignCallDescriptor SHENANDOAH_LOAD_BARRIER_PHANTOM_NARROW = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, HAS_SIDE_EFFECT, any(),
-            "ShenandoahRuntime::load_reference_barrier_phantom_narrow", Object.class, Object.class, Word.class);
+                    "ShenandoahRuntime::load_reference_barrier_phantom_narrow", Object.class, Object.class, Word.class);
 
     // void ShenandoahRuntime::pre_barrier(JavaThread*, oopDesc*)
-    public static final HotSpotForeignCallDescriptor SHENANDOAH_PRE_BARRIER = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, NO_SIDE_EFFECT, NO_LOCATIONS, "ShenandoahRuntime::pre_barrier_stack_only",
-            void.class, Object.class);
+    public static final HotSpotForeignCallDescriptor SHENANDOAH_PRE_BARRIER = new HotSpotForeignCallDescriptor(LEAF_NO_VZERO, NO_SIDE_EFFECT, NO_LOCATIONS,
+                    "ShenandoahRuntime::pre_barrier_stack_only", void.class, Object.class);
 
     /**
      * Signature of an unsafe {@link System#arraycopy} stub.

@@ -56,23 +56,19 @@ public class AArch64ShenandoahPreWriteBarrierOp extends AArch64LIRInstruction {
     private final GraalHotSpotVMConfig config;
     private final HotSpotProviders providers;
 
-    @Alive
-    private Value address;
+    @Alive private Value address;
 
-    @Alive({OperandFlag.REG, OperandFlag.ILLEGAL})
-    private Value expectedObject;
+    @Alive({OperandFlag.REG, OperandFlag.ILLEGAL}) private Value expectedObject;
 
-    @Temp
-    private Value temp;
+    @Temp private Value temp;
 
-    @Temp({OperandFlag.REG, OperandFlag.ILLEGAL})
-    private Value temp2;
+    @Temp({OperandFlag.REG, OperandFlag.ILLEGAL}) private Value temp2;
 
     private final ForeignCallLinkage callTarget;
     private final boolean nonNull;
 
     public AArch64ShenandoahPreWriteBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers,
-                                              AllocatableValue address, AllocatableValue expectedObject, AllocatableValue temp, AllocatableValue temp2, ForeignCallLinkage callTarget, boolean nonNull) {
+                    AllocatableValue address, AllocatableValue expectedObject, AllocatableValue temp, AllocatableValue temp2, ForeignCallLinkage callTarget, boolean nonNull) {
         super(TYPE);
         this.config = config;
         this.providers = providers;
@@ -98,7 +94,6 @@ public class AArch64ShenandoahPreWriteBarrierOp extends AArch64LIRInstruction {
 
     @Override
     protected void emitCode(CompilationResultBuilder crb, AArch64MacroAssembler masm) {
-        //System.out.println("Emitting Shenandoah SATB barrier");
         Register storeAddress = asRegister(address);
         Register thread = providers.getRegisters().getThreadRegister();
         Register tmp = asRegister(temp);
