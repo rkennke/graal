@@ -25,8 +25,6 @@
  */
 package jdk.graal.compiler.nodes.gc;
 
-import jdk.graal.compiler.nodes.memory.ReadNode;
-import jdk.graal.compiler.nodes.memory.address.AddressNode;
 import org.graalvm.word.LocationIdentity;
 
 import jdk.graal.compiler.core.common.memory.BarrierType;

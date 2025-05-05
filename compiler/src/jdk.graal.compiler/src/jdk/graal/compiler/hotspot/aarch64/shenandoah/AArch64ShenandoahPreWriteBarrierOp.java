@@ -1,6 +1,5 @@
 /*
- * Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
- * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -136,7 +135,7 @@ public class AArch64ShenandoahPreWriteBarrierOp extends AArch64LIRInstruction {
             if (VerifyAssemblyGCBarriers.getValue(crb.getOptions())) {
                 try (AArch64MacroAssembler.ScratchRegister sc1 = masm.getScratchRegister()) {
                     Register tmp2 = sc1.getRegister();
-                    verifyOop(masm, previousValue, tmp, tmp2, false, true);
+                    verifyOop(masm, previousValue, tmp, tmp2, false);
                 }
             }
 
@@ -183,7 +182,7 @@ public class AArch64ShenandoahPreWriteBarrierOp extends AArch64LIRInstruction {
         });
     }
 
-    private void verifyOop(AArch64MacroAssembler masm, Register previousValue, Register tmp, Register tmp2, boolean compressed, boolean nonNull) {
-        ((AArch64HotSpotMacroAssembler) masm).verifyOop(previousValue, tmp, tmp2, compressed, nonNull);
+    private static void verifyOop(AArch64MacroAssembler masm, Register previousValue, Register tmp, Register tmp2, boolean compressed) {
+        ((AArch64HotSpotMacroAssembler) masm).verifyOop(previousValue, tmp, tmp2, compressed, true);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,7 +27,6 @@ package jdk.graal.compiler.nodes.gc.shenandoah;
 import static jdk.graal.compiler.nodes.NamedLocationIdentity.OFF_HEAP_LOCATION;
 
 import jdk.graal.compiler.core.common.type.AbstractObjectStamp;
-import jdk.graal.compiler.hotspot.replacements.HotSpotReplacementsUtil;
 import jdk.graal.compiler.nodeinfo.InputType;
 import jdk.graal.compiler.nodes.extended.ArrayRangeWrite;
 import jdk.graal.compiler.nodes.gc.BarrierSet;
@@ -85,10 +84,6 @@ public class ShenandoahBarrierSet implements BarrierSet {
 
     @Override
     public BarrierType readBarrierType(LocationIdentity location, ValueNode address, Stamp loadStamp) {
-        if (location instanceof HotSpotReplacementsUtil.OopHandleLocationIdentity) {
-            assert loadStamp instanceof AbstractObjectStamp : loadStamp;
-            return BarrierType.READ;
-        }
         if (location.equals(OFF_HEAP_LOCATION)) {
             // Off heap locations are never expected to contain objects
             assert !loadStamp.isObjectStamp() : location;
@@ -268,10 +263,10 @@ public class ShenandoahBarrierSet implements BarrierSet {
         }
     }
 
-    protected ValueNode maybeUncompressReference(ValueNode value, boolean narrow) {
+    protected ValueNode maybeUncompressReference(ValueNode value, @SuppressWarnings("unused") boolean narrow) {
         return value;
     }
-    protected ValueNode maybeCompressReference(ValueNode value, boolean narrow) {
+    protected ValueNode maybeCompressReference(ValueNode value, @SuppressWarnings("unused") boolean narrow) {
         return value;
     }
 
