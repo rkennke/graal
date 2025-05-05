@@ -42,7 +42,7 @@ import static jdk.graal.compiler.lir.LIRInstruction.OperandFlag.REG;
 import static jdk.vm.ci.aarch64.AArch64.zr;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
 
-public class AArch64HotSpotShenandoahCardBarrierOp  extends AArch64LIRInstruction {
+public class AArch64HotSpotShenandoahCardBarrierOp extends AArch64LIRInstruction {
     public static final LIRInstructionClass<AArch64HotSpotShenandoahCardBarrierOp> TYPE = LIRInstructionClass.create(AArch64HotSpotShenandoahCardBarrierOp.class);
 
     private final GraalHotSpotVMConfig config;
@@ -50,6 +50,7 @@ public class AArch64HotSpotShenandoahCardBarrierOp  extends AArch64LIRInstructio
 
     @Alive({COMPOSITE}) protected AArch64AddressValue address;
     @Temp({REG}) protected AllocatableValue tmp;
+
     protected AArch64HotSpotShenandoahCardBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers, AArch64AddressValue addr, AllocatableValue tmp) {
         super(TYPE);
         this.config = config;
@@ -61,7 +62,7 @@ public class AArch64HotSpotShenandoahCardBarrierOp  extends AArch64LIRInstructio
     @Override
     protected void emitCode(CompilationResultBuilder crb, AArch64MacroAssembler masm) {
         try (AArch64MacroAssembler.ScratchRegister tmp2 = masm.getScratchRegister();
-             AArch64MacroAssembler.ScratchRegister tmp3 = masm.getScratchRegister()) {
+                        AArch64MacroAssembler.ScratchRegister tmp3 = masm.getScratchRegister()) {
             Register rtmp1 = asRegister(tmp);
             Register rtmp2 = tmp2.getRegister();
             Register rtmp3 = tmp3.getRegister();
@@ -79,7 +80,8 @@ public class AArch64HotSpotShenandoahCardBarrierOp  extends AArch64LIRInstructio
 
             masm.lsr(64, rAddr, rAddr, HotSpotReplacementsUtil.cardTableShift(config));
 
-            AArch64Address currCTHolderAddr = AArch64Address.createImmediateAddress(64, AArch64Address.AddressingMode.IMMEDIATE_SIGNED_UNSCALED, rthread, HotSpotReplacementsUtil.shenandoahCardTableOffset(config));
+            AArch64Address currCTHolderAddr = AArch64Address.createImmediateAddress(64, AArch64Address.AddressingMode.IMMEDIATE_SIGNED_UNSCALED, rthread,
+                            HotSpotReplacementsUtil.shenandoahCardTableOffset(config));
             masm.ldr(64, rtmp2, currCTHolderAddr);
 
             AArch64Address cardAddr = AArch64Address.createRegisterOffsetAddress(8, rAddr, rtmp2, false);

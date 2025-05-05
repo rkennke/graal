@@ -83,6 +83,7 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
             return this.value;
         }
     }
+
     enum GCState {
         HAS_FORWARDED(1 << GCStateBitPos.HAS_FORWARDED_BITPOS.value),
         MARKING(1 << GCStateBitPos.MARKING_BITPOS.value),
@@ -93,13 +94,16 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
         OLD_MARKING(1 << GCStateBitPos.OLD_MARKING_BITPOS.value);
 
         private final int value;
+
         GCState(int val) {
             this.value = val;
         }
+
         public int getValue() {
             return this.value;
         }
     }
+
     private final HotSpotProviders providers;
     private final GraalHotSpotVMConfig config;
 
@@ -113,10 +117,10 @@ public class AArch64HotSpotShenandoahReadBarrierOp extends AArch64LIRInstruction
     boolean notNull;
 
     public AArch64HotSpotShenandoahReadBarrierOp(GraalHotSpotVMConfig config, HotSpotProviders providers,
-                                                 AllocatableValue result, AllocatableValue object, AArch64AddressValue loadAddress,
-                                                 ForeignCallLinkage callTarget,
-                                                 ShenandoahLoadBarrierNode.ReferenceStrength strength,
-                                                 boolean notNull) {
+                    AllocatableValue result, AllocatableValue object, AArch64AddressValue loadAddress,
+                    ForeignCallLinkage callTarget,
+                    ShenandoahLoadBarrierNode.ReferenceStrength strength,
+                    boolean notNull) {
         super(TYPE);
         this.providers = providers;
         this.config = config;

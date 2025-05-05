@@ -189,7 +189,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
             }
             case ArrayRangeWrite ignored -> GraalError.unimplemented("ArrayRangeWrite is not used");
             case null, default ->
-                    GraalError.guarantee(n.getBarrierType() == BarrierType.NONE, "missed a node that requires a GC barrier: %s", n.getClass());
+                GraalError.guarantee(n.getBarrierType() == BarrierType.NONE, "missed a node that requires a GC barrier: %s", n.getClass());
         }
     }
 
@@ -229,10 +229,8 @@ public class ShenandoahBarrierSet implements BarrierSet {
         boolean narrow = node.stamp(NodeView.DEFAULT) instanceof NarrowOopStamp;
         ValueNode uncompressed = maybeUncompressReference(node, narrow);
         ShenandoahLoadBarrierNode lrb = graph.add(new ShenandoahLoadBarrierNode(uncompressed, address, barrierType, narrow));
-        //graph.addAfterFixed(node, lrb);
         ValueNode compValue = maybeCompressReference(lrb, narrow);
         ValueNode newUsage = uncompressed != node ? uncompressed : lrb;
-        //System.out.println("Replacing node: " + node + " with new node: " + compValue + " when use is not: " + newUsage);
         node.replaceAtUsages(compValue, InputType.Value, usage -> usage != newUsage);
     }
 
@@ -266,6 +264,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
     protected ValueNode maybeUncompressReference(ValueNode value, @SuppressWarnings("unused") boolean narrow) {
         return value;
     }
+
     protected ValueNode maybeCompressReference(ValueNode value, @SuppressWarnings("unused") boolean narrow) {
         return value;
     }

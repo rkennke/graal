@@ -39,7 +39,8 @@ import jdk.vm.ci.meta.ResolvedJavaField;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
 /**
- * Specialization of {@link ShenandoahBarrierSet} that adds support for read barriers on handle locations.
+ * Specialization of {@link ShenandoahBarrierSet} that adds support for read barriers on handle
+ * locations.
  */
 public class HotSpotShenandoahBarrierSet extends ShenandoahBarrierSet {
     private CompressEncoding oopEncoding;
