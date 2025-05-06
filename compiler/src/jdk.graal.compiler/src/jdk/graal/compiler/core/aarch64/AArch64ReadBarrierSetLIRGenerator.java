@@ -28,8 +28,8 @@ import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.common.memory.BarrierType;
 import jdk.graal.compiler.core.common.memory.MemoryOrderMode;
 import jdk.graal.compiler.lir.Variable;
-import jdk.graal.compiler.lir.gen.BarrierSetLIRGeneratorTool;
 import jdk.graal.compiler.lir.gen.LIRGeneratorTool;
+import jdk.graal.compiler.lir.gen.ReadBarrierSetLIRGeneratorTool;
 import jdk.vm.ci.aarch64.AArch64Kind;
 import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Value;
@@ -37,7 +37,7 @@ import jdk.vm.ci.meta.Value;
 /**
  * AArch64 specific LIR generation for GC barriers.
  */
-public interface AArch64ReadBarrierSetLIRGenerator extends BarrierSetLIRGeneratorTool {
+public interface AArch64ReadBarrierSetLIRGenerator extends ReadBarrierSetLIRGeneratorTool {
 
     /**
      * Emit an atomic read-and-write instruction with any required GC barriers.

@@ -228,7 +228,7 @@ public class ShenandoahBarrierSet implements BarrierSet {
         StructuredGraph graph = node.graph();
         boolean narrow = node.stamp(NodeView.DEFAULT) instanceof NarrowOopStamp;
         ValueNode uncompressed = maybeUncompressReference(node, narrow);
-        ShenandoahLoadBarrierNode lrb = graph.add(new ShenandoahLoadBarrierNode(uncompressed, address, barrierType, narrow));
+        ShenandoahLoadRefBarrierNode lrb = graph.add(new ShenandoahLoadRefBarrierNode(uncompressed, address, barrierType, narrow));
         ValueNode compValue = maybeCompressReference(lrb, narrow);
         ValueNode newUsage = uncompressed != node ? uncompressed : lrb;
         node.replaceAtUsages(compValue, InputType.Value, usage -> usage != newUsage);

@@ -109,7 +109,7 @@ public class AArch64ShenandoahPreWriteBarrierOp extends AArch64LIRInstruction {
         int gcStateOffset = HotSpotReplacementsUtil.shenandoahGCStateOffset(config);
         AArch64Address gcState = masm.makeAddress(8, thread, gcStateOffset);
         masm.ldr(8, tmp, gcState);
-        masm.tst(64, tmp, AArch64HotSpotShenandoahReadBarrierOp.GCState.MARKING.getValue());
+        masm.tst(64, tmp, AArch64HotSpotShenandoahLoadRefBarrierOp.GCState.MARKING.getValue());
         masm.branchConditionally(AArch64Assembler.ConditionFlag.NE, midPath);
         masm.bind(done);
 
