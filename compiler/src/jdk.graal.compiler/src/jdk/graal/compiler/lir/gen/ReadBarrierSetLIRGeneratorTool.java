@@ -28,6 +28,7 @@ import jdk.graal.compiler.core.common.LIRKind;
 import jdk.graal.compiler.core.common.memory.BarrierType;
 import jdk.graal.compiler.core.common.memory.MemoryOrderMode;
 import jdk.graal.compiler.lir.LIRFrameState;
+import jdk.graal.compiler.lir.Variable;
 import jdk.vm.ci.meta.Value;
 
 /**
@@ -40,5 +41,5 @@ public interface ReadBarrierSetLIRGeneratorTool extends BarrierSetLIRGeneratorTo
      * Emit a read of a memory location along with the required read barrier.. {@code barrierType}
      * will always be something besides {@link BarrierType#NONE}.
      */
-    Value emitBarrieredLoad(LIRGeneratorTool tool, LIRKind kind, Value address, LIRFrameState state, MemoryOrderMode memoryOrder, BarrierType barrierType);
+    Variable emitBarrieredLoad(LIRGeneratorTool tool, LIRKind kind, Value address, LIRFrameState state, MemoryOrderMode memoryOrder, BarrierType barrierType);
 }

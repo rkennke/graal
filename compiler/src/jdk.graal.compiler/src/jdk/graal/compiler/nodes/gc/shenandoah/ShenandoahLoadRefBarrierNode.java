@@ -43,8 +43,8 @@ import static jdk.graal.compiler.nodeinfo.NodeCycles.CYCLES_64;
 import static jdk.graal.compiler.nodeinfo.NodeSize.SIZE_64;
 
 @NodeInfo(cycles = CYCLES_64, size = SIZE_64)
-public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLowerable {
-    public static final NodeClass<ShenandoahLoadBarrierNode> TYPE = NodeClass.create(ShenandoahLoadBarrierNode.class);
+public final class ShenandoahLoadRefBarrierNode extends ValueNode implements LIRLowerable {
+    public static final NodeClass<ShenandoahLoadRefBarrierNode> TYPE = NodeClass.create(ShenandoahLoadRefBarrierNode.class);
 
     public enum ReferenceStrength {
         STRONG,
@@ -68,7 +68,7 @@ public final class ShenandoahLoadBarrierNode extends ValueNode implements LIRLow
         };
     }
 
-    public ShenandoahLoadBarrierNode(ValueNode value, AddressNode address, BarrierType barrierType, boolean narrow) {
+    public ShenandoahLoadRefBarrierNode(ValueNode value, AddressNode address, BarrierType barrierType, boolean narrow) {
         super(TYPE, value.stamp(NodeView.DEFAULT));
         this.value = value;
         this.address = address;

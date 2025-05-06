@@ -375,7 +375,7 @@ public class AMD64HotSpotZBarrierSetLIRGenerator implements AMD64ReadBarrierSetL
     }
 
     @Override
-    public Value emitBarrieredLoad(LIRGeneratorTool tool,
+    public Variable emitBarrieredLoad(LIRGeneratorTool tool,
                     LIRKind kind,
                     Value address,
                     LIRFrameState state,
